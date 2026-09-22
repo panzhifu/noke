@@ -1,0 +1,72 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Trunk
+        # 与本地同一条安装路径:拉官方预编译二进制,版本写死,避免 CI 与本地行为漂移
+        run: |
+          curl -sSfL https://github.com/trunk-rs/trunk/releases/download/v0.21.14/trunk-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz -C "$HOME/.cargo/bin"
+          trunk --version
+
+      - name: Resolve public base path
+        # 仓库名以 .github.io 结尾 → 站点在根路径;否则在 /仓库名/ 下
+        id: base
+        env:
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          if [[ "$REPO" == *.github.io ]]; then
+            echo "url=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=/$REPO/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        run: trunk build --release --public-url "${{ steps.base.outputs.url }}"
+
+      - name: Skip Jekyll
+        run: touch dist/.nojekyll
+
+      - name: Show output
+        run: ls -la dist && du -sh dist
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

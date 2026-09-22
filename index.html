@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>noke · 个人网站</title>
+  <meta name="description" content="noke 的个人网站 —— Rust 独立开发,作品、手记与联系方式。">
+  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+  <meta property="og:title" content="noke">
+  <meta property="og:description" content="Rust 独立开发 · 作品 / 手记 / 联系">
+  <meta property="og:type" content="website">
+
+  <link data-trunk rel="rust" data-wasm-opt="z" data-keep-debug="false" />
+  <link data-trunk rel="css" href="styles/main.css" />
+  <link data-trunk rel="copy-dir" href="assets" />
+  <link data-trunk rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+
+  <script>
+    // 在首帧之前定好主题,避免深色/浅色闪烁
+    (function () {
+      try {
+        var t = localStorage.getItem('noke-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="boot" aria-hidden="true">
+    <span class="boot-mark"></span>
+  </div>
+  <noscript>
+    <div class="wrap">
+      <h1>noke</h1>
+      <p>这个站点由 Leptos 编译成 WebAssembly 渲染,需要开启 JavaScript 才能查看。</p>
+    </div>
+  </noscript>
+</body>
+</html>
