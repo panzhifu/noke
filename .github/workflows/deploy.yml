@@ -28,9 +28,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      # 首次运行时代为开启 Pages 并设为「GitHub Actions」构建源(本机 gh token 没有 pages 权限,只能靠这步)
+      # enablement: true —— Pages 未开启时由它代为创建并设为 Actions 构建源
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Install Trunk
         # 与本地同一条安装路径:拉官方预编译二进制,版本写死,避免 CI 与本地行为漂移
