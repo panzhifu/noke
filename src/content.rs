@@ -115,8 +115,13 @@ pub const STACK: &[&str] = &[
 pub struct Project {
     pub name: &'static str,
     pub summary: &'static str,
+    /// 第二段。留空则整段不渲染 —— 卡片之间的高度差一部分就是这么来的。
+    pub note: &'static str,
+    /// 要点列表。留空则整块不渲染。
+    pub points: &'static [&'static str],
     pub tags: &'static [&'static str],
-    pub year: &'static str,
+    /// 取自仓库 createdAt 的年月。
+    pub period: &'static str,
     pub url: &'static str,
     pub featured: bool,
 }
@@ -124,38 +129,70 @@ pub struct Project {
 pub const PROJECTS: &[Project] = &[
     Project {
         name: "Trove",
-        summary: "面向创作者的本地素材管理器:全文搜索、视觉搜索、40+ 格式预览与 3D 模型,\
-                  标签和智能集合,数据永不上传。",
+        summary: "面向创作者的本地素材管理器 —— 打开就能用,数据留在自己机器上。",
+        note: "现在投入最多的一块:预览和搜索还在继续做深。",
+        points: &[
+            "全文搜索与视觉搜索",
+            "40+ 格式预览,含 3D 模型",
+            "标签与智能集合",
+            "数据永不上传",
+        ],
         tags: &["Rust", "桌面", "gpui"],
-        year: "2026",
+        period: "2026-09",
         url: "https://github.com/panzhifu/trove",
         featured: true,
     },
     Project {
-        name: "tinyticker",
-        summary: "极简悬浮倒计时 / 秒表。常驻桌面角落,不打扰,但随时可用。",
-        tags: &["Rust", "桌面"],
-        year: "2026",
-        url: "https://github.com/panzhifu/tinyticker",
-        featured: false,
-    },
-    Project {
         name: "kaleido",
-        summary: "图像编辑器。仓库自述目前只有一句 “A image editor”,能力以代码为准 —— 想让人看懂就补一句吧。",
+        summary: "图像编辑器。",
+        note: "仓库自述至今只有一句 “A image editor”,能力以代码为准。",
+        points: &[],
         tags: &["Rust", "桌面"],
-        year: "2026",
+        period: "2026-08",
         url: "https://github.com/panzhifu/kaleido",
         featured: false,
     },
     Project {
+        name: "tinyticker",
+        summary: "极简悬浮倒计时 / 秒表。",
+        note: "",
+        points: &[],
+        tags: &["Rust", "桌面"],
+        period: "2026-09",
+        url: "https://github.com/panzhifu/tinyticker",
+        featured: false,
+    },
+    Project {
+        name: "textrest",
+        summary: "读小说的地方。",
+        note: "仓库自述 “a noval read”。这几个里最早的一个,三月就开了。",
+        points: &[],
+        tags: &["Rust"],
+        period: "2026-03",
+        url: "https://github.com/panzhifu/textrest",
+        featured: false,
+    },
+    Project {
         name: "trove-website",
-        summary: "Trove 的官网。同一个技术栈的另一次练习:Leptos CSR 编译到 Wasm,托管在 GitHub Pages。",
+        summary: "Trove 的官网。",
+        note: "同一个技术栈的另一次练习:Leptos CSR 编译到 Wasm 再托管到 GitHub Pages —— 和这个站点共用一套做法。",
+        points: &[],
         tags: &["Rust", "Leptos", "Web"],
-        year: "2026",
+        period: "2026-09",
         url: "https://github.com/panzhifu/trove-website",
         featured: false,
     },
-    // TODO: 新项目照抄上面一块即可,标签会自动出现在筛选条里。
+    Project {
+        name: "echo",
+        summary: "笔记工具。",
+        note: "仓库自述 “rust note soft”。",
+        points: &[],
+        tags: &["Rust"],
+        period: "2026-08",
+        url: "https://github.com/panzhifu/echo",
+        featured: false,
+    },
+    // TODO: 新项目照抄上面一块即可;标签会自动进筛选条,note / points 留空就不占位置。
 ];
 
 pub struct Note {

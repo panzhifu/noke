@@ -5,46 +5,58 @@ use crate::content::{PROJECTS, Project};
 
 const ALL: &str = "全部";
 
-fn all_tags() -> Vec<&'static str> {
-    let mut tags = vec![ALL];
-    for project in PROJECTS {
-        for tag in project.tags {
-            if !tags.contains(tag) {
-                tags.push(*tag);
-            }
-        }
-    }
-    tags
+/// 封面色相 / 高度按项目在 PROJECTS 里的序号定:黄金角散列让相邻两张不撞色,
+/// 用序号而不是筛后的位置,筛选时颜色也不会跳。
+const COVERS: [u16; 3] = [104, 152, 196];
+const FEATURED_COVER: u16 = 216;
+
+fn card_style(index: usize, featured: bool) -> String {
+    // 起点 26° ≈ 本站强调色的色相,所以第一张（主线）卡片和整站同温。
+    let hue = ((26.0 + index as f32 * 137.508) % 360.0).round() as u16;
+    let cover = if featured {
+        FEATURED_COVER
+    } else {
+        COVERS[index % COVERS.len()]
+    };
+    format!("--hue: {hue}; --cover: {cover}px")
 }
 
-fn visible(tag: &'static str) -> Vec<&'static Project> {
+/// 带序号返回,序号用来取稳定的封面配色。
+fn visible(tag: &'static str) -> Vec<(usize, &'static Project)> {
     PROJECTS
         .iter()
-        .filter(|project| tag == ALL || project.tags.contains(&tag))
+        .enumerate()
+        .filter(|(_, project)| tag == ALL || project.tags.contains(&tag))
+        .map(|(index, project)| (index, project))
         .collect()
 }
 
 #[component]
-fn ProjectCard(project: &'static Project) -> impl IntoView {
+fn ProjectCard(index: usize, project: &'static Project) -> impl IntoView {
+    let style = card_style(index, project.featured);
+    let initial = project.name.chars().next().unwrap_or('·').to_string();
     let tags = project
         .tags
         .iter()
         .map(|tag| view! { <li>{ *tag }</li> })
         .collect::<Vec<_>>();
 
-    let card = view! {
-        <article class="card" class:featured=project.featured>
-            <header class="card-head">
-                <h3 class="card-title">{ project.name }</h3>
-                <span class="card-year">{ project.year }</span>
-            </header>
-            <p class="card-summary">{ project.summary }</p>
-            <ul class="card-tags">{ tags }</ul>
-            <span class="card-cta" aria-hidden="true">{ "↗" }</span>
-        </article>
+    // 空的 note / points 直接不渲染:插了锚点注释的节点在 CSS 里就不再是 :empty 了。
+    let note = if project.note.is_empty() {
+        None
+    } else {
+        Some(view! { <p class="card-note">{ project.note }</p> })
     };
-
-    // 没填 URL 的项目渲染成不带 href 的 <a>:语义上就不是链接,样式也保持一致。
+    let points = if project.points.is_empty() {
+        None
+    } else {
+        Some(view! {
+            <ul class="card-points">
+                { project.points.iter().map(|point| view! { <li>{ *point }</li> }).collect::<Vec<_>>() }
+            </ul>
+        })
+    };
+    // 没填 URL 的项目渲染成不带 href 的 <a>:语义上就不是链接,样式仍然对齐。
     let href = if project.url.is_empty() {
         None
     } else {
@@ -52,7 +64,20 @@ fn ProjectCard(project: &'static Project) -> impl IntoView {
     };
 
     view! {
-        <a class="card-link" href=href target="_blank" rel="noreferrer">{ card }</a>
+        <a class="card-link" href=href target="_blank" rel="noreferrer">
+            <article class="card" class:featured=project.featured style=style>
+                <div class="card-cover" aria-hidden="true">
+                    <span class="cover-initial">{ initial }</span>
+                    <span class="cover-period">{ project.period }</span>
+                </div>
+                <h3 class="card-title">{ project.name }</h3>
+                <p class="card-summary">{ project.summary }</p>
+                { note }
+                { points }
+                <ul class="card-tags">{ tags }</ul>
+                <span class="card-cta" aria-hidden="true">{ "↗" }</span>
+            </article>
+        </a>
     }
 }
 
@@ -78,15 +103,34 @@ pub fn Projects() -> impl IntoView {
     view! {
         <Section id="projects" index="02" title="作品" kicker="还在维护的那些">
             <div class="filters" role="group" aria-label="按标签筛选">{ filters }</div>
-            <div class="cards">
+
+            // 只剩一两张时锁列数,否则多列布局会把它们挤在左侧一条里。
+            <div
+                class="cards"
+                class:single=move || visible(tag.get()).len() == 1
+                class:pair=move || visible(tag.get()).len() == 2
+            >
                 { move || visible(tag.get())
                     .into_iter()
-                    .map(|project| view! { <ProjectCard project=project /> })
+                    .map(|(index, project)| view! { <ProjectCard index=index project=project /> })
                     .collect::<Vec<_>>() }
             </div>
+
             <p class="count">
                 { move || format!("标签「{}」· {} 个项目", tag.get(), visible(tag.get()).len()) }
             </p>
         </Section>
     }
+}
+
+fn all_tags() -> Vec<&'static str> {
+    let mut tags = vec![ALL];
+    for project in PROJECTS {
+        for tag in project.tags {
+            if !tags.contains(tag) {
+                tags.push(*tag);
+            }
+        }
+    }
+    tags
 }
