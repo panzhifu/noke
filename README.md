@@ -59,5 +59,9 @@ python3 -m http.server -d /tmp/noke-preview 8000   # 打开 http://localhost:800
 
 ## 已验证
 
-`cargo clippy`、`cargo fmt --check` 无警告;浏览器里实测过主题切换(含 localStorage 持久化)、
-标签筛选、移动端抽屉菜单、滚动导航高亮与阅读进度条。
+线上 https://panzhifu.github.io/noke/ 用真实产物逐项跑过:深浅色主题切换与 localStorage 持久化、
+作品标签筛选、移动端抽屉、滚动导航高亮、阅读进度条、复制邮箱、四张卡片外链;控制台无报错
+(仅 Chrome 对 wasm 的 preload 不支持 SRI 的一条提示,来自 Trunk 注入的 `integrity`,无害)。
+`cargo clippy` / `cargo fmt --check` 零警告;wasm 220KB(gzip 约 92KB)。
+
+未做的:没有可见表面可以截图,所以视觉观感(留白、字号是否耐看)没有人工确认过。
