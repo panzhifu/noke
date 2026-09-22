@@ -28,8 +28,18 @@ trunk build --release              # 产物在 dist/
 
 ## 部署到 GitHub Pages
 
+线上地址:https://panzhifu.github.io/noke/
+
 1. 在 GitHub 建一个仓库(名字决定访问路径,见下)。
-2. 仓库 **Settings → Pages → Build and deployment → Source** 选 **GitHub Actions**。
+2. 开启 Pages 并设为 Actions 构建源 —— 界面路径 **Settings → Pages → Source: GitHub Actions**,
+   或命令行一步:
+
+   ```bash
+   gh api -X POST /repos/<所有者>/<仓库名>/pages -f build_type=workflow
+   ```
+
+   这一步只能在仓库所有者 token 下完成,工作流里的 `GITHUB_TOKEN` 无权创建 Pages 站点
+   (`configure-pages` 的 `enablement: true` 会报 `Resource not accessible by integration`)。
 3. `git push origin main`,等 `.github/workflows/deploy.yml` 跑完即可。
 
 工作流会自动算资源前缀:
