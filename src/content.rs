@@ -46,8 +46,8 @@ pub const SITE: Site = Site {
     role: "Rust / 独立开发",
     tagline: "把想法写成能跑的东西,然后让它一直跑下去。",
     subline: "这里是我的数字角落:做什么、想什么、留下什么。",
-    // TODO: 换成你自己的邮箱(页面上的「复制邮箱」按钮用的就是它)
-    email: "hello@example.com",
+    // 邮箱直接来自本机 git 身份;不想公开的话换成一个专用地址即可。
+    email: "noke601508@outlook.com",
     github: "https://github.com/panzhifu",
     blog: "https://panzhifu.github.io/",
     since: "2025",
@@ -141,9 +141,8 @@ pub const PROJECTS: &[Project] = &[
     },
     Project {
         name: "kaleido",
-        // TODO: 我没能从仓库里读到它的自述,补一句它到底是做什么的。
-        summary: "一个还没写完自述的项目 —— 点击标题去看代码。",
-        tags: &["Rust"],
+        summary: "图像编辑器。仓库自述目前只有一句 “A image editor”,能力以代码为准 —— 想让人看懂就补一句吧。",
+        tags: &["Rust", "桌面"],
         year: "2026",
         url: "https://github.com/panzhifu/kaleido",
         featured: false,
