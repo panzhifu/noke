@@ -110,8 +110,10 @@ pub fn init_reveal() {
         callback.as_ref().unchecked_ref::<js_sys::Function>(),
         &{
             let options = IntersectionObserverInit::new();
-            options.set_root_margin("0px 0px -12% 0px");
-            options.set_threshold_f64(0.08);
+            // threshold 必须是 0:比例是按目标总面积算的,以后作品变多、区块高过视口十几倍时,
+            // 任何大于 0 的阈值都可能永远达不到,那一屏内容就再也不淡入了。
+            options.set_root_margin("0px 0px -8% 0px");
+            options.set_threshold_f64(0.0);
             options
         },
     );
