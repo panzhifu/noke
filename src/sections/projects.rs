@@ -34,7 +34,6 @@ fn visible(tag: &'static str) -> Vec<(usize, &'static Project)> {
 #[component]
 fn ProjectCard(index: usize, project: &'static Project) -> impl IntoView {
     let style = card_style(index, project.featured);
-    let initial = project.name.chars().next().unwrap_or('·').to_string();
     let tags = project
         .tags
         .iter()
@@ -66,11 +65,10 @@ fn ProjectCard(index: usize, project: &'static Project) -> impl IntoView {
     view! {
         <a class="card-link" href=href target="_blank" rel="noreferrer">
             <article class="card" class:featured=project.featured style=style>
-                <div class="card-cover" aria-hidden="true">
-                    <span class="cover-initial">{ initial }</span>
+                <div class="card-cover">
+                    <h3 class="cover-title">{ project.name }</h3>
                     <span class="cover-period">{ project.period }</span>
                 </div>
-                <h3 class="card-title">{ project.name }</h3>
                 <p class="card-summary">{ project.summary }</p>
                 { note }
                 { points }

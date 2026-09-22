@@ -737,13 +737,13 @@ html.reveal-armed .reveal.is-in {
   color: var(--accent);
 }
 
-.cover-initial {
-  font-family: var(--font-mono);
-  font-size: 30px;
-  line-height: 1;
-  letter-spacing: -0.04em;
+.cover-title {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-weight: 620;
   color: var(--fg);
-  opacity: 0.55;
 }
 
 .cover-period {
@@ -753,17 +753,9 @@ html.reveal-armed .reveal.is-in {
   color: var(--muted);
 }
 
-.card-title {
-  margin: 0;
-  padding: 2px 18px 0;
-  font-size: 17.5px;
-  letter-spacing: -0.015em;
-  font-weight: 620;
-}
-
 .card-summary {
   margin: 0;
-  padding: 0 18px;
+  padding: 6px 18px 0;
   font-size: 14.3px;
   line-height: 1.62;
 }
