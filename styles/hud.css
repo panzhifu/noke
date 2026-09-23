@@ -1,0 +1,238 @@
+/* ============================================================
+   HUD 层 —— 借的是 henryheffernan.com 的那套读法:
+   整屏是场景,文字缩到四角、全部等宽,再叠一层暗角 + 颗粒 + 极淡扫描线。
+   纯 CSS,不动 three.js,也不需要后处理 pass。
+   ============================================================ */
+
+/* ---------- 氛围层 ---------- */
+
+.hud-atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  /* 顶栏按钮、面板、入口都在它上面;3D 场景在它下面 */
+  pointer-events: none;
+}
+
+.hud-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 100% at 50% 42%, transparent 46%, rgb(0 0 0 / 0.34) 100%),
+    linear-gradient(to bottom, rgb(0 0 0 / 0.16), transparent 22%);
+}
+
+html[data-theme="light"] .hud-vignette {
+  background:
+    radial-gradient(120% 100% at 50% 42%, transparent 52%, rgb(60 44 20 / 0.2) 100%),
+    linear-gradient(to bottom, rgb(60 44 20 / 0.1), transparent 24%);
+}
+
+.hud-grain {
+  position: absolute;
+  inset: -2px;
+  opacity: 0.5;
+  mix-blend-mode: soft-light;
+  /* feTurbulence 生成的噪点,内联成 data URI:不多一个请求 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+.hud-scan {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.018) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* 颗粒轻轻抖:就是参考站那种 jitter 手感,只动 transform(合成层,不触发重排) */
+@media (prefers-reduced-motion: no-preference) {
+  .hud-grain {
+    animation: hud-jitter 1.1s steps(6, end) infinite;
+  }
+
+  @keyframes hud-jitter {
+    0% { transform: translate3d(0, 0, 0); }
+    20% { transform: translate3d(-0.4px, 0.3px, 0); }
+    40% { transform: translate3d(0.3px, -0.5px, 0); }
+    60% { transform: translate3d(-0.2px, -0.2px, 0); }
+    80% { transform: translate3d(0.5px, 0.4px, 0); }
+    100% { transform: translate3d(0, 0, 0); }
+  }
+}
+
+/* ---------- 四角文字 ---------- */
+
+.topbar,
+.entry-bar,
+.colophon {
+  font-family: var(--font-mono);
+}
+
+.topbar {
+  padding: 18px 22px 0;
+  letter-spacing: 0.05em;
+}
+
+.topbar-hint {
+  font-size: 11px;
+  text-transform: none;
+}
+
+/* 右下角的操作提示:告诉人可以拖、可以点 */
+.hud-hints {
+  position: fixed;
+  right: 22px;
+  bottom: 18px;
+  z-index: 16;
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.hud-hints kbd {
+  font: inherit;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--bg-elev) 62%, transparent);
+  color: var(--fg);
+}
+
+body:has(> .hud-hints) > .colophon {
+  padding-right: 11rem;
+}
+
+/* ---------- 入口:从药丸改成方角小框,更像终端 ---------- */
+
+.entry-bar {
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+}
+
+.entry-row {
+  gap: 0.4rem;
+}
+
+.entry {
+  padding: 0.34rem 0.7rem;
+  border-radius: 4px;
+  border-color: var(--line);
+  background: color-mix(in oklab, var(--bg-elev) 56%, transparent);
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+
+.entry:hover,
+.entry:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-elev));
+}
+
+/* ---------- hover 标签:贴在 3D 物件上方 ---------- */
+
+.obj-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--bg) 84%, transparent);
+  backdrop-filter: blur(6px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: var(--fg);
+  pointer-events: none;
+}
+
+.obj-label::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 1px;
+  height: 5px;
+  background: var(--line-strong);
+}
+
+/* ---------- 面板:桌面端是右上角的 HUD 卡片,窄屏仍是底部抽屉 ---------- */
+
+.panel-layer {
+  inset: auto 22px auto 22px;
+  top: 72px;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.panel {
+  width: min(420px, 100%);
+  max-height: min(56dvh, 520px);
+  border-radius: var(--r-md);
+  border-color: var(--line-strong);
+  animation: hud-card-in 0.22s var(--ease);
+}
+
+@keyframes hud-card-in {
+  from { transform: translateY(-6px) scale(0.99); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.panel-head {
+  padding: 10px 14px;
+}
+
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+}
+
+.panel-title::before {
+  content: "// ";
+  color: var(--accent);
+}
+
+.panel-close {
+  font-size: 10.5px;
+}
+
+.panel-body {
+  padding: 14px;
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  /* 手机上卡片没有横向空间,退回底部抽屉 */
+  .panel-layer {
+    inset: auto 12px max(12px, env(safe-area-inset-bottom));
+    top: auto;
+    justify-content: center;
+  }
+
+  .panel {
+    width: 100%;
+    max-height: min(58dvh, 440px);
+  }
+
+  .hud-hints {
+    display: none;
+  }
+
+  body:has(> .hud-hints) > .colophon {
+    padding-right: 0.9rem;
+  }
+}

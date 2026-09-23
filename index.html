@@ -29,8 +29,9 @@
 
   <link data-trunk rel="rust" data-wasm-opt="z" data-keep-debug="false" />
   <link data-trunk rel="css" href="styles/main.css" />
-  <link data-trunk rel="css" href="styles/room.css" />
   <link data-trunk rel="css" href="styles/room3d.css" />
+  <!-- hud 必须排最后:它要覆盖 room3d.css 里的入口样式 -->
+  <link data-trunk rel="css" href="styles/hud.css" />
   <link data-trunk rel="copy-dir" href="assets" />
   <link data-trunk rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
 

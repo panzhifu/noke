@@ -1,4 +1,4 @@
-use crate::panel::Spot;
+use crate::ui::panel::Spot;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -61,6 +61,7 @@ pub fn on_escape(set_spot: WriteSignal<Option<Spot>>) {
     let handler = Closure::wrap(Box::new(move |ev: web_sys::KeyboardEvent| {
         if ev.key() == "Escape" {
             set_spot.set(None);
+            announce_panel_closed();
         }
     }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
     if window
@@ -134,6 +135,16 @@ pub fn on_pick(set_spot: WriteSignal<Option<Spot>>) {
         return;
     }
     handler.forget();
+}
+
+/// 通知 3D 层「面板收了」,好让镜头退回原位。
+pub fn announce_panel_closed() {
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    if let Ok(event) = web_sys::CustomEvent::new("noke:panel-closed") {
+        document.dispatch_event(&event).ok();
+    }
 }
 
 /// 3D 脚本可能比 Leptos 先跑完,那一刻页面上还没有 #room3d。

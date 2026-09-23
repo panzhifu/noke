@@ -3,7 +3,7 @@ use leptos::prelude::*;
 use crate::content::{
     ABOUT, NOTES, NOW, POSTER_CAPTION, POSTER_MARKS, PROJECTS, SITE, SOCIALS, STACK, hue_at,
 };
-use crate::hooks::copy_to_clipboard;
+use crate::hooks::{announce_panel_closed, copy_to_clipboard};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Spot {
@@ -32,7 +32,10 @@ fn is(spot: Option<Spot>, want: Spot) -> bool {
 /// 切换时不重建内容,也省掉一套动态视图类型。
 #[component]
 pub fn Panel(spot: ReadSignal<Option<Spot>>, set_spot: WriteSignal<Option<Spot>>) -> impl IntoView {
-    let close = move |_| set_spot.set(None);
+    let close = move |_| {
+        set_spot.set(None);
+        announce_panel_closed();
+    };
     let (copied, set_copied) = signal(false);
     let email = SITE.email;
 

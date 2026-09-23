@@ -207,3 +207,13 @@ pub fn hue_at(index: usize) -> u16 {
 }
 
 pub const COLOPHON: &str = "本站是一间用 Three.js 搭的房间 · 家具模型在 Blender 里做 · Leptos 编译成 WebAssembly · GitHub Pages · 无 Cookie、无追踪、无后端";
+
+/// 入口条上那句话。家具一个个能被点之后,这句可以跟着改。
+pub const ENTRY_NOTE: &str = "桌子能直接点(它开作品);其余入口先借这条。";
+
+/// 右下角的操作提示:(键/动作, 结果)
+pub const HUD_HINTS: &[(&str, &str)] = &[
+    ("拖拽", "转动视角"),
+    ("点家具", "打开对应格子"),
+    ("Esc", "收起"),
+];
