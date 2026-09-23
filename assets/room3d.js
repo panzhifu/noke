@@ -592,6 +592,9 @@ function start(host) {
       walls: 2,
       fog: true,
       pixelRatio: renderer.getPixelRatio(),
+      // 场景包围盒:床或桌子摆歪、单位没换算对,这里一眼就能看出来(米)
+      spanMeters: [Number(size.x.toFixed(2)), Number(size.y.toFixed(2)), Number(size.z.toFixed(2))],
+      centerMeters: [Number(center.x.toFixed(2)), Number(center.y.toFixed(2)), Number(center.z.toFixed(2))],
     });
     document.dispatchEvent(new CustomEvent('noke:room-ready'));
     } catch (error) {

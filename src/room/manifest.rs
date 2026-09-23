@@ -22,7 +22,7 @@ pub struct Model {
     pub spot: Option<&'static str>,
 }
 
-/// 目前有地毯、电动车和一张书桌。
+/// 目前有地毯、电动车、书桌、床和一台唱机。
 /// 往后的家具按 Blender 里的坐标直接加在后面就行。
 pub const MODELS: &[Model] = &[
     Model {
@@ -46,6 +46,28 @@ pub const MODELS: &[Model] = &[
         // 这个模型是「玩具尺寸」:Blender 里只有 3.0 × 7.3 × 4.8 cm(约真实的 1/23,
         // 大概是从 .3ds 导入时单位就错了)。放大回一辆 1.75 m 长的电动自行车。
         scale: 23.8,
+        spot: None,
+    },
+    Model {
+        name: "bed",
+        file: "assets/models/bed.glb",
+        // tools/compress_glb.py 处理过:已站直、按米重缩放、脚底贴 z=0、水平居中 ——
+        // 所以 scale 留 1.0,position 就是现实里的摆放位置(米)。
+        // 1.34 宽 × 0.95 高 × 2.18 长,长边正好落在进深方向,不用再转。
+        position: (-2.05, 0.0, 0.2),
+        rotation: (0.0, 0.0, 0.0),
+        scale: 1.0,
+        spot: Some("about"),
+    },
+    Model {
+        name: "turntable",
+        file: "assets/models/turntable.glb",
+        // 0.43 宽 × 0.38 高(防尘盖是掀开的)× 0.42 深,脚底贴 z=0。
+        // y 给的是桌面高度:书桌 2.045 × 0.35 ≈ 0.72 —— 若唱机陷进桌面或浮着,改这个数。
+        position: (-0.62, 0.72, -1.35),
+        // 稍微斜一点,别和桌边平行得像个贴图
+        rotation: (0.0, -25.0, 0.0),
+        scale: 1.0,
         spot: None,
     },
     Model {
