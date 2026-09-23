@@ -29,7 +29,7 @@ trunk build --release              # 产物在 dist/
 ## 房间场景(styles/room.css)
 
 第二个区块是一间用纯 CSS 3D 搭的房间:书桌上有显示器(屏幕里是 Trove 的界面示意,点它去仓库)、
-一张床、墙上四张海报位。没有 WebGL、没有三方库,场景本身只有 12KB CSS。
+一张床、墙上四张海报位。没有 WebGL、没有三方库,room.css 源文件 12KB、线上传输 4KB。
 
 - 想换成你设计的海报:把文件放进 `assets/`,再把 `src/sections/room.rs` 里的 `.poster` 换成
   `<img src="assets/你的海报.png">`;那张虚线框是留给你的空位。
