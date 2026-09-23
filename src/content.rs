@@ -46,17 +46,23 @@ pub const SOCIALS: &[Social] = &[
 ];
 
 /// 屏幕上那个界面示意对应哪个软件、链向哪。
+///
+/// CSS 3D 那版房间的回退路径在用(`room.rs` 的显示器屏幕示意)。
+/// 现在的房间是 Three.js 的,等显示器模型搬进 `models.rs` 时会重新用上。
+#[allow(dead_code)]
 pub struct Screen {
     pub app: &'static str,
 }
 
+#[allow(dead_code)]
 pub const SCREEN: Screen = Screen { app: "Trove" };
 
 pub const ABOUT: &[&str] = &[
     "我是 noke,用 Rust 写软件。大多数时候在写桌面应用 —— 那些打开就能用、不联网也能用、\
      数据留在自己机器上的工具。",
     "喜欢在细节上花时间:一个视图为什么这么排,一次滚动为什么这么顺。也在玩 Leptos + \
-     WebAssembly,这个站点本身就是那条路线的产物 —— 一间用 CSS 搭的房间,没有 WebGL,没有三方库。",
+     WebAssembly,这个站点本身就是那条路线的产物 —— 一间用 Three.js 渲染的房间,\
+     家具模型慢慢在 Blender 里做出来。",
 ];
 
 pub struct Highlight {
@@ -200,4 +206,4 @@ pub fn hue_at(index: usize) -> u16 {
     ((26.0 + index as f32 * 137.508) % 360.0).round() as u16
 }
 
-pub const COLOPHON: &str = "本站是一间用 CSS 搭的房间 · Leptos 编译成 WebAssembly · GitHub Pages · 无 Cookie、无追踪、无后端";
+pub const COLOPHON: &str = "本站是一间用 Three.js 搭的房间 · 家具模型在 Blender 里做 · Leptos 编译成 WebAssembly · GitHub Pages · 无 Cookie、无追踪、无后端";

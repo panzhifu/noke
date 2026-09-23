@@ -1,0 +1,116 @@
+/* ============================================================
+   3D 房间:Three.js 渲染的那一层,以及它的临时入口条。
+   颜色全部继承 main.css 的 --bg / --fg / --line / --accent,
+   所以主题切换不需要在这里再写一遍。
+   ============================================================ */
+
+/* ---------- 场景:铺满视口的背景层 ---------- */
+
+.room3d {
+  position: fixed;
+  inset: 0;
+  /* -1:沉到所有内容底下,否则 fixed 定位会盖住 static 的顶栏和页脚。
+     body 没建层叠上下文,所以它仍然在 body 背景之上。 */
+  z-index: -1;
+  /* 模型到位之前先给个底色,免得闪一下白 */
+  background: var(--bg);
+}
+
+.room3d canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* 页脚钉在最后一行,不受前面多一个/少一个元素的影响。
+   它会压在 3D 场景上,得给一层底衬才读得清。 */
+body:has(> .room3d) > .colophon {
+  grid-row: 4;
+  padding: 0.32rem 0.9rem;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--bg) 74%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* ---------- 入口条:家具还没搬进 3D 之前,先用它顶着 ---------- */
+
+/* 3D 层不占 grid 行,所以页面结构得重排:顶栏 / 入口条 / 场景(占满剩余) / 页脚。
+   入口条放上面而不是下面 —— 放下面会压住地毯的底边,而地毯是眼下唯一的主角。 */
+body:has(> .room3d) {
+  grid-template-rows: auto auto 1fr auto;
+}
+
+.entry-bar {
+  grid-row: 2;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.62rem;
+  max-width: min(92vw, 44rem);
+  margin-bottom: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+.entry-note {
+  opacity: 0.72;
+}
+
+.entry-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  pointer-events: auto;
+}
+
+.entry {
+  appearance: none;
+  padding: 0.44rem 0.92rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-elev) 74%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), transform 0.18s var(--ease);
+}
+
+.entry:hover,
+.entry:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 窄屏:入口条贴紧自己的底边,少挡点场景 */
+@media (max-width: 720px) {
+  .entry-bar {
+    margin-bottom: 0.7rem;
+    font-size: 0.72rem;
+  }
+
+  .entry {
+    padding: 0.38rem 0.72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry {
+    transition: none;
+  }
+
+  .entry:hover,
+  .entry:focus-visible {
+    transform: none;
+  }
+}

@@ -1,15 +1,72 @@
 mod content;
 mod hooks;
+mod models;
 mod panel;
-mod room;
+mod room3d;
 mod theme;
 
-use content::{COLOPHON, SITE};
+use content::{COLOPHON, POSTER_MARKS, SITE};
 use leptos::mount::mount_to_body;
 use leptos::prelude::*;
 use panel::{Panel, Spot};
-use room::Room;
+use room3d::Room3D;
 use theme::next_theme;
+
+/// 还没搬进 3D 的那几格入口。
+/// 3D 场景现在只有地毯,点不到东西,所以入口先摆在页面上。
+/// 等家具陆续补进 `models.rs` 并带上 spot 字段,这个组件就可以整个删掉。
+const MAIN_ENTRIES: &[(&str, Spot)] = &[
+    ("作品", Spot::Work),
+    ("关于", Spot::About),
+    ("手记", Spot::Notes),
+    ("联系", Spot::Contact),
+];
+
+#[component]
+fn EntryBar(set_spot: WriteSignal<Option<Spot>>) -> impl IntoView {
+    let main = MAIN_ENTRIES
+        .iter()
+        .map(|(label, spot)| {
+            let spot = *spot;
+            view! {
+                <button
+                    type="button"
+                    class="entry"
+                    on:click=move |_| set_spot.set(Some(spot))
+                >
+                    { *label }
+                </button>
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let posters = POSTER_MARKS
+        .iter()
+        .enumerate()
+        .map(|(index, mark)| {
+            let spot = Spot::Poster(index);
+            view! {
+                <button
+                    type="button"
+                    class="entry"
+                    on:click=move |_| set_spot.set(Some(spot))
+                >
+                    { format!("海报 {mark}") }
+                </button>
+            }
+        })
+        .collect::<Vec<_>>();
+
+    view! {
+        <nav class="entry-bar" aria-label="站点入口">
+            <span class="entry-note">{ "3D 房间还在搬家具,先用这几个入口" }</span>
+            <span class="entry-row">
+                { main }
+                { posters }
+            </span>
+        </nav>
+    }
+}
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -18,11 +75,13 @@ pub fn App() -> impl IntoView {
     hooks::on_escape(set_spot);
 
     view! {
-        // 名字与标语交给场景里的桌前铭牌;这一行只给读屏和搜索引擎。
+        // 名字与标语交给场景;这一行只给读屏和搜索引擎。
         <h1 class="sr-only">{ format!("{} —— {} · {}", SITE.name, SITE.role, SITE.tagline) }</h1>
 
+        <Room3D set_spot=set_spot />
+
         <div class="topbar">
-            <span class="topbar-hint">{ "点家具看看" }</span>
+            <span class="topbar-hint">{ "一间刚铺好地毯的房间" }</span>
             <button
                 type="button"
                 class="icon-btn"
@@ -42,7 +101,7 @@ pub fn App() -> impl IntoView {
             </button>
         </div>
 
-        <Room set_spot=set_spot picked=spot />
+        <EntryBar set_spot=set_spot />
 
         <Panel spot=spot set_spot=set_spot />
 
@@ -65,5 +124,4 @@ fn main() {
     console_error_panic_hook::set_once();
     mount_to_body(App);
     remove_boot_screen();
-    hooks::init_room_tilt();
 }

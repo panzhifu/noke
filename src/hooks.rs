@@ -6,6 +6,9 @@ use web_sys::HtmlElement;
 
 /// 房间场景的视差:把指针位置写成 --rx / --ry 挂在舞台上,旋转本身交给 CSS。
 /// 减弱动效时 CSS 压根不读这两个变量(room.css 的 no-preference 查询),所以这里不需要分支。
+///
+/// CSS 3D 那版房间的回退路径 —— 现在房间是 Three.js 的(`room3d.rs`),视差在 JS 里做。
+#[allow(dead_code)]
 pub fn init_room_tilt() {
     let Some(stage) = web_sys::window()
         .and_then(|window| window.document())
@@ -106,4 +109,54 @@ pub fn copy_to_clipboard(text: &'static str, copied: WriteSignal<bool>) {
         copied.set(false);
     }
     reset.forget();
+}
+
+/// 3D 层点到东西时抛出 `noke:pick`,detail 是 `"work"` / `"poster:2"` 这样的字符串。
+/// 转成 Spot 交给信号,面板自然会浮出来。
+pub fn on_pick(set_spot: WriteSignal<Option<Spot>>) {
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    let handler = Closure::wrap(Box::new(move |event: web_sys::Event| {
+        let spot = event
+            .dyn_into::<web_sys::CustomEvent>()
+            .ok()
+            .and_then(|custom| custom.detail().as_string())
+            .and_then(|raw| parse_spot(&raw));
+        if let Some(spot) = spot {
+            set_spot.set(Some(spot));
+        }
+    }) as Box<dyn FnMut(web_sys::Event)>);
+    if document
+        .add_event_listener_with_callback("noke:pick", handler.as_ref().unchecked_ref())
+        .is_err()
+    {
+        return;
+    }
+    handler.forget();
+}
+
+/// 3D 脚本可能比 Leptos 先跑完,那一刻页面上还没有 #room3d。
+/// 挂载完成后补一句招呼,让它能开工(反过来它自己也会先试一次)。
+pub fn announce_room_mounted() {
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    if let Ok(event) = web_sys::CustomEvent::new("noke:room-mounted") {
+        document.dispatch_event(&event).ok();
+    }
+}
+
+/// `"work"` / `"poster:2"` → Spot。认不出来就当作没点。
+fn parse_spot(raw: &str) -> Option<Spot> {
+    match raw {
+        "work" => Some(Spot::Work),
+        "about" => Some(Spot::About),
+        "notes" => Some(Spot::Notes),
+        "contact" => Some(Spot::Contact),
+        _ => raw
+            .strip_prefix("poster:")
+            .and_then(|index| index.parse().ok())
+            .map(Spot::Poster),
+    }
 }

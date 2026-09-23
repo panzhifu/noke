@@ -4,16 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>noke · 个人网站</title>
-  <meta name="description" content="noke 的个人网站 —— 一间用 CSS 3D 搭的房间:点上家具看作品、手记与联系方式。">
-  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="noke 的个人网站 —— 一间用 Three.js 渲染的房间:地毯已经铺好,家具陆续搬进来。">
+  <meta name="theme-color" content="#0b0c0f" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
   <meta property="og:title" content="noke">
   <meta property="og:description" content="Rust 独立开发 · 作品 / 手记 / 联系">
   <meta property="og:type" content="website">
 
+  <!--
+    three.js 走 importmap,而且必须排在所有 module 脚本之前 ——
+    Trunk 会把 wasm 的加载脚本注入到下面 <link data-trunk="rust"> 所在的位置,
+    而 importmap 一旦晚于任何 module 脚本出现,浏览器就直接忽略它,
+    那样 room3d.js 里的 import 'three' 会全部解析失败。
+    路径写成相对的:换仓库名或部署到子路径都不用动。
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./assets/vendor/three.module.min.js",
+        "three/addons/": "./assets/vendor/addons/"
+      }
+    }
+  </script>
+
   <link data-trunk rel="rust" data-wasm-opt="z" data-keep-debug="false" />
   <link data-trunk rel="css" href="styles/main.css" />
   <link data-trunk rel="css" href="styles/room.css" />
+  <link data-trunk rel="css" href="styles/room3d.css" />
   <link data-trunk rel="copy-dir" href="assets" />
   <link data-trunk rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
 
@@ -37,8 +54,11 @@
   <noscript>
     <div class="wrap">
       <h1>noke</h1>
-      <p>这个站点由 Leptos 编译成 WebAssembly 渲染,需要开启 JavaScript 才能查看。</p>
+      <p>这个站点由 Leptos 编译成 WebAssembly、房间用 Three.js 渲染,需要开启 JavaScript 才能查看。</p>
     </div>
   </noscript>
+
+  <!-- 3D 房间。脚本会自己等 Leptos 把 #room3d 渲染出来(两侧都留了招呼)。 -->
+  <script type="module" src="./assets/room3d.js"></script>
 </body>
 </html>
