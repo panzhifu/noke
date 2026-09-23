@@ -33,6 +33,10 @@ const ANISOTROPY = 8;
 // 拖过这几个像素就不算「点一下」,否则每次转完视角都会误开面板
 const DRAG_THRESHOLD = 6;
 // 镜头钳位(度):俯角不到 25° 会看到地板背面;方位角限制在两面墙的正面一侧
+// 长焦取景:fov 越小,透视变形越弱,3D 越不像"玩具盒子"(参考 p3d 的 fov 25)
+const CAMERA_FOV = 29;
+// 俯角锁死:true 时拖拽只能水平转,不存在转到露馅的角度;false 才用下面的区间
+const POLAR_LOCK = true;
 const POLAR_LIMITS = [25, 72];
 const AZIMUTH_LIMITS = [-20, 66];
 const DISTANCE_RANGE = [0.6, 1.35]; // × 取景距离
@@ -52,8 +56,14 @@ function palette() {
     hemiSky: dark ? 0x3a4152 : 0xe4ebf5,
     hemiGround: dark ? 0x1a1b21 : 0xd6ccb9,
     key: dark ? 0xfff1da : 0xfff8ee,
-    keyIntensity: dark ? 1.5 : 2.1,
-    hemiIntensity: dark ? 0.6 : 1.2,
+    keyIntensity: dark ? 1.6 : 2.2,
+    hemiIntensity: dark ? 0.4 : 0.85,
+    // 参考 p3d 的做法:一支 penumbra=1 的柔边聚光当强调光,不投影,
+    // 只负责在画面里打出一块"被照到的地方" —— 没有它整间房是均匀平光。
+    accent: dark ? 0xffd9a8 : 0xfff3df,
+    accentIntensity: dark ? 22 : 26,
+    accentAngle: 0.42,
+    accentPenumbra: 1,
     // 补光从天顶另一边来,只为了把背光面从纯黑里捞出来,不该再投一份影子
     fill: dark ? 0xbcd0f0 : 0xdce8ff,
     fillIntensity: dark ? 0.34 : 0.5,
@@ -113,7 +123,12 @@ function createScene(colors) {
   const fill = new THREE.DirectionalLight(colors.fill, colors.fillIntensity);
   scene.add(fill);
 
-  return { scene, hemi, key, fill };
+  // 强调光用聚光:spot.shadow 一律关掉,投影仍由 key 负责 ——
+  // 换 spotlight 当主光得重写阴影相机(透视 vs 正交),为这点氛围不值
+  const accent = new THREE.SpotLight(colors.accent, colors.accentIntensity, 0, colors.accentAngle, colors.accentPenumbra);
+  scene.add(accent, accent.target);
+
+  return { scene, hemi, key, fill, accent };
 }
 
 /**
@@ -145,7 +160,7 @@ function createWalls(colors, size, center) {
 }
 
 /** 阴影相机、地板、墙、主光位置都得按实际场景尺寸来，不然大地毯会糊或者被裁掉。 */
-function fitRig(scene, key, fill, rig) {
+function fitRig(scene, key, fill, accent, rig) {
   const bounds = new THREE.Box3().setFromObject(rig);
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
@@ -167,6 +182,9 @@ function fitRig(scene, key, fill, rig) {
   key.position.set(center.x + span * 0.5, span * 1.1, center.z + span * 0.7);
   fill.position.set(center.x - span * 0.8, span * 0.7, center.z - span * 0.6);
   fill.target = target;
+  // 强调光从左前上方打下来,照到地毯与书桌那一块
+  accent.position.set(center.x - span * 0.45, height_of(span), center.z + span * 0.75);
+  accent.target.position.set(center.x, 0, center.z);
 
   return { center, size };
 }
@@ -269,6 +287,11 @@ async function loadModels(rig, manifest, anisotropy) {
   return { pickables, loaded, meshes };
 }
 
+// 聚光的高度:够高才能盖住整个取景跨度
+function height_of(span) {
+  return span * 1.35;
+}
+
 function start(host) {
   const manifest = readManifest(host);
   let colors = palette();
@@ -294,8 +317,8 @@ function start(host) {
 
   const anisotropy = Math.min(ANISOTROPY, renderer.capabilities.getMaxAnisotropy() ?? 1);
 
-  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 2000);
-  const { scene, hemi, key, fill } = createScene(colors);
+  const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
+  const { scene, hemi, key, fill, accent } = createScene(colors);
   const rig = new THREE.Group();
   scene.add(rig);
 
@@ -305,8 +328,10 @@ function start(host) {
   controls.dampingFactor = 0.08;
   controls.rotateSpeed = 0.6;
   controls.zoomSpeed = 0.5;
-  controls.minPolarAngle = deg(POLAR_LIMITS[0]);
-  controls.maxPolarAngle = deg(POLAR_LIMITS[1]);
+  // 锁定值 = 取景俯角对应的极角,和 refit 里首次摆位的角度一致,不会自相矛盾
+  const fittedPolar = Math.PI / 2 - CAMERA_PITCH;
+  controls.minPolarAngle = POLAR_LOCK ? fittedPolar : deg(POLAR_LIMITS[0]);
+  controls.maxPolarAngle = POLAR_LOCK ? fittedPolar : deg(POLAR_LIMITS[1]);
   controls.minAzimuthAngle = deg(AZIMUTH_LIMITS[0]);
   controls.maxAzimuthAngle = deg(AZIMUTH_LIMITS[1]);
 
@@ -336,9 +361,27 @@ function start(host) {
 
   const renderOnce = () => renderer.render(scene, camera);
 
+  // 按需渲染(对应 p3d 那个 frameloop='demand'):静止若干帧就停 rAF,
+  // 由 OrbitControls 的 change、指针移动、尺寸/主题变化重新叫醒。
+  // 不然为了 0.07 弧度的视差和阻尼,一直在满帧重画五个带贴图的网络模型。
+  const QUIET_FRAMES = 6;
+  const EPS = 1e-4;
+  let quiet = 0;
+  let last = '';
+
+  const signature = () =>
+    [
+      rig.rotation.x.toFixed(5), rig.rotation.y.toFixed(5),
+      camera.position.x.toFixed(4), camera.position.y.toFixed(4), camera.position.z.toFixed(4),
+      controls.target.x.toFixed(4), controls.target.y.toFixed(4), controls.target.z.toFixed(4),
+    ].join(',');
+
+  const settled = () =>
+    Math.abs(parallax.tx - parallax.x) < EPS && Math.abs(parallax.ty - parallax.y) < EPS;
+
   const draw = () => {
     loop = 0;
-    if (!reduced) {
+    if (!reduced && !settled()) {
       // 视差是「自己动」的那部分,所以它才是该被减弱动效关掉的;
       // 阻尼和拖拽属于「跟着手动」,任何时候都得响应。
       parallax.x += (parallax.tx - parallax.x) * PARALLAX_EASE;
@@ -350,10 +393,21 @@ function start(host) {
     controls.update();
     renderOnce();
     updateLabel();
-    loop = requestAnimationFrame(draw);
+    const now = signature();
+    quiet = now === last ? quiet + 1 : 0;
+    last = now;
+    if (quiet < QUIET_FRAMES) {
+      loop = requestAnimationFrame(draw);
+    } else {
+      // 停下来时把累计帧数写出去,好核对「真的停了」
+      host.dataset.frames = String(renderer.info.render.frame);
+      // 停下时把水平角度也写出去:核对「拖拽确实转了相机」
+      host.dataset.view = controls.getAzimuthalAngle().toFixed(3);
+    }
   };
 
-  const schedule = () => {
+  const invalidate = () => {
+    quiet = 0;
     if (!loop) loop = requestAnimationFrame(draw);
   };
 
@@ -395,7 +449,7 @@ function start(host) {
     framing = fitCamera(camera, host, center, size);
     applyFog();
     refit();
-    schedule();
+    invalidate();
   };
 
   const applyTheme = () => {
@@ -409,12 +463,16 @@ function start(host) {
     key.intensity = colors.keyIntensity;
     fill.color = new THREE.Color(colors.fill);
     fill.intensity = colors.fillIntensity;
+    accent.color = new THREE.Color(colors.accent);
+    accent.intensity = colors.accentIntensity;
+    accent.angle = colors.accentAngle;
+    accent.penumbra = colors.accentPenumbra;
     if (floor) floor.material.color = new THREE.Color(colors.floor);
     if (walls) {
       walls.back.material.color = new THREE.Color(colors.wallBack);
       walls.side.material.color = new THREE.Color(colors.wallSide);
     }
-    renderOnce();
+    invalidate();
   };
 
   const setHovered = (mesh) => {
@@ -430,6 +488,7 @@ function start(host) {
     }
     host.dataset.hover = hovered ? hovered.userData.spot || '' : '';
     host.style.cursor = hovered ? 'pointer' : '';
+    invalidate();
   };
 
   const pickAt = (updateHover) => {
@@ -463,6 +522,7 @@ function start(host) {
     pointer.set(nx * 2 - 1, -(ny * 2 - 1));
     if (dragging) {
       dragging.travel += Math.abs(event.movementX || 0) + Math.abs(event.movementY || 0);
+      invalidate();
       return;
     }
     if (!reduced) {
@@ -481,6 +541,7 @@ function start(host) {
 
   host.addEventListener('pointerdown', (event) => {
     dragging = { travel: 0 };
+    invalidate();
     void event;
   });
 
@@ -491,6 +552,7 @@ function start(host) {
     // 拖过一段距离就不算「点这一下」
     if (traveled > DRAG_THRESHOLD) return;
     const mesh = pickAt(false);
+    invalidate();
     if (!mesh?.userData.spot) return;
     focusOn(mesh);
     document.dispatchEvent(new CustomEvent('noke:pick', { detail: mesh.userData.spot }));
@@ -504,6 +566,7 @@ function start(host) {
     targetGoal.y -= box.getSize(new THREE.Vector3()).y * 0.15;
     focused = mesh.userData.spot;
     host.dataset.focused = focused || '';
+    invalidate();
   };
 
   const releaseFocus = () => {
@@ -511,10 +574,15 @@ function start(host) {
     focused = null;
     if (framing) targetGoal.copy(framing.center);
     host.dataset.focused = '';
+    invalidate();
   };
 
   // 面板被关掉(往往是 Esc)时,注视点也该退回场景中心
   document.addEventListener('noke:panel-closed', releaseFocus);
+
+  // 拖拽、滚轮缩放、阻尼滑动都会走这里 —— 按需渲染的唤醒源主要靠它
+  controls.addEventListener('change', invalidate);
+  host.addEventListener('wheel', invalidate, { passive: true });
 
   window.addEventListener('resize', resize);
 
@@ -525,7 +593,7 @@ function start(host) {
       parallax.tx = 0;
       parallax.ty = 0;
     }
-    schedule();
+    invalidate();
   });
 
   const observer = new MutationObserver(() => {
@@ -548,7 +616,7 @@ function start(host) {
         return;
       }
 
-      const fitted = fitRig(scene, key, fill, rig);
+      const fitted = fitRig(scene, key, fill, accent, rig);
       center = fitted.center;
       size = fitted.size;
       // 地板比场景再放大一圈,镜头怎么转都看不见边
@@ -566,16 +634,25 @@ function start(host) {
       }
 
       resize();
+      // 提前编译着色器(对应 drei 的 <Preload all />):否则第一次出现某个材质时掉一帧
+      renderer.compile(scene, camera);
+      invalidate();
       host.dataset.roomReady = '1';
       host.dataset.theme = document.documentElement.dataset.theme || '';
       host.dataset.stats = JSON.stringify({
         models: result.loaded,
         meshes: result.meshes,
         pickable: pickables.length,
-        lights: 3,
+        lights: 4,
         walls: 2,
         fog: true,
         controls: 'orbit',
+        polarLock: POLAR_LOCK,
+        fov: CAMERA_FOV,
+        demandRendering: true,
+        // 装配完立刻的累计帧数:证明 boot 阶段没有连画一堆帧(静置后是否真停下,
+        // 得在可见窗口的 devtools 里看 dataset.frames 会不会一直涨)
+        frameAtBoot: renderer.info.render.frame,
         anisotropy,
         pixelRatio: renderer.getPixelRatio(),
         // 场景包围盒:床或桌子摆歪、单位没换算对,这里一眼就能看出来(米)
