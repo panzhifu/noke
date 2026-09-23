@@ -1,6 +1,6 @@
 """无头跑 Blender 压模型:合并成单网格 + 降面 + 贴图转 WebP + 归一化到「米、脚底贴地、水平居中」。
 
-用法:blender --background --python tools/compress_glb.py -- 输入.glb 输出.glb 目标三角面 贴图长边上限 [keep]
+用法:blender --background --python tools/compress_glb.py -- 输入.glb 输出.glb 目标三角面 贴图长边上限 [keep|no-up]
 
 新模型(从 Downloads 拿进来的)不加 keep:会站直、换算成米、脚底贴地、水平居中,
 清单里 position/scale 直接照现实尺寸写。已经摆好的模型加 keep:只降面和压贴图,

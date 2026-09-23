@@ -1,6 +1,6 @@
 # noke · 个人网站
 
-一整间房间就是站点的全部界面:没有滚动、没有导航条,家具可以点,点开的东西从下方浮起。
+一整间房间就是站点的全部界面:没有滚动、没有导航条、没有可见文字,家具可以点,点开的五格面板在桌面端是右上角的卡片、窄屏退回底部抽屉。
 
 Rust + [Leptos](https://leptos.dev)(CSR,编译成 WebAssembly)负责界面与状态,
 房间由 [Three.js](https://threejs.org) 渲染,家具模型在 Blender 里做、导出成 glb。
@@ -9,15 +9,15 @@ Three.js 随仓库一起发布,运行时不从 CDN 拉任何东西。
 
 线上地址:https://panzhifu.github.io/noke/
 
-## 当前状态:房间刚铺好地毯
+## 当前状态
 
-| 已经进 3D | 还在等 |
+| 已经进 3D | 点了会开面板 |
 | --- | --- |
-| 地毯 —— `assets/models/carpet.glb`(源自 `~/blender/地毯.blend`) | 床、书桌、显示器、抽屉柜、杯子、海报 |
+| 地毯、电动车、书桌、床、唱机、冰箱 —— 见 `src/room/manifest.rs` | 只有书桌(开「作品」)和床(开「关于」) |
 
-所以入口暂时摆在页面底部那一排按钮里(`src/lib.rs` 的 `EntryBar`),点开的还是原来那五格面板。
-**每搬进来一件家具**:在 `src/models.rs` 给它写上 `spot`,再把 `EntryBar` 里对应那个按钮删掉。
-按钮删完,这个组件就能整个移除,房间重新变回唯一界面。
+剩下三格(手记 / 联系 / 海报)靠面板头部的左右箭头到达;键盘 Tab 则从 `sr-only` 的入口条进。
+页面上没有可见文字,所以**没有「搬完家具就删掉的临时按钮」这回事了** —— 入口条是长期给键盘和读屏留的通道。
+墙上的海报位还是空的:那一格目前是面板里的两张迷你占版式。
 
 ## 本地开发
 
@@ -35,12 +35,21 @@ trunk build --release              # 产物在 dist/
 
 四步:
 
-1. **Blender 里做**,导出 glb(贴图会被一并嵌进去)。
+1. **Blender 里做**,先导出一个原始 glb(贴图会一并嵌进去)。
    导出前删掉灯光 —— 网页自己打光;粒子系统也去掉,glTF 不支持、导出器会报错。
-   `target/tmp/export_glb.py` 里就是这套导出脚本,改个路径可以直接复用。
-2. **丢进 `assets/models/`**,文件名随意,清单里指到就行。
-3. **在 `src/models.rs` 的 `MODELS` 里加一条**:路径、位置、旋转、缩放,以及可选的 `spot`。
-4. 如果它有 `spot`,把 `src/lib.rs` 里 `EntryBar` 的对应按钮删掉。
+2. **过一遍 `tools/compress_glb.py`**(无头 Blender,不需要开界面):
+
+   ```bash
+   blender --background --python tools/compress_glb.py -- \
+     原始.glb assets/models/名字.glb 15000 1024
+   ```
+
+   它把层级 join 成一个网格、降面、贴图封顶后转 WebP,再归一化成「米、脚底贴 z=0、水平居中」,
+   最后打印一段 JSON(尺寸、包围盒、面数)—— 照着它填清单里的 `position` / `scale`。
+   已经在清单里摆好的模型加 `keep`(只降面和压贴图,不碰方向单位);
+   高度是最长边的家具(冰箱这类)加 `no-up`,否则「最薄的一面当顶」会把它放倒。
+3. **在 `src/room/manifest.rs` 的 `MODELS` 里加一条**:路径、位置、旋转、缩放,以及可选的 `spot`。
+4. 给了 `spot` 就到此为止 —— 家具自己就能点了。`EntryBar` 是键盘/读屏通道,不用跟着改。
 
 ### 坐标系以 Blender 为准
 
@@ -63,9 +72,11 @@ trunk build --release              # 产物在 dist/
 
 - 配色 / 字号:`styles/main.css` 顶部两个 `[data-theme]` 块。
   3D 层跟着这两个主题走 —— `assets/room3d.js` 顶部的 `palette()` 读 `data-theme`,
-  得出背景 / 地板 / 三盏灯的颜色,切主题时不用改它。
-- 面板:五格内容常驻 DOM,靠 `.pane-off` 显隐,切换时不重建(`src/panel.rs`)。
-- 入口按钮:`src/lib.rs` 的 `EntryBar`(临时的,见上)。
+  得出背景 / 地板 / 四盏灯的颜色,切主题时不用改它。
+- 面板:五格内容常驻 DOM,靠 `.pane-off` 显隐,切换时不重建(`src/ui/panel.rs`)。
+- **页面上没有可见文字**:名字和标语在 `h1.sr-only` 与 meta 里;入口条(`src/ui/entries.rs`)
+  整条 `sr-only`,只有键盘 Tab 进来才显形;面板头部是图标 —— 左右箭头遍历五格,× 关闭。
+  能点的家具靠 hover 提亮 + 手型指针来表示,不靠标签。
 
 ## Three.js 放在哪
 
@@ -99,11 +110,14 @@ Trunk 会把 wasm 的加载脚本注入到 `<link data-trunk="rust">` 那一行�
 
 ```
 src/
-  lib.rs        页面骨架 + 入口条 + 挂载
-  models.rs     3D 模型清单 ← 加模型改这里
-  room3d.rs     把清单挂到 DOM,把 3D 的拾取事件接回信号
-  room.rs       CSS 3D 那版房间(已停用,见下)
-  panel.rs      五格面板
+  lib.rs        页面骨架 + 挂载
+  room/
+    mod.rs      把清单挂到 DOM,把 3D 的拾取事件接回信号
+    manifest.rs 3D 模型清单 ← 加模型改这里
+  ui/
+    entries.rs  入口条(sr-only,给键盘和读屏)
+    panel.rs    五格面板 + Spot 枚举 + 图标翻页
+    theme.rs    深浅色切换与持久化(没手动选过时跟随系统)
   content.rs    全部文案
   hooks.rs      Esc / 复制邮箱 / 3D 拾取事件
 assets/
@@ -111,20 +125,21 @@ assets/
   models/       glb
   vendor/       Three.js
 styles/
-  main.css      主题、顶栏、面板、页脚
+  main.css      主题、顶栏、面板
   room3d.css    3D 层与入口条
-  room.css      CSS 房间的样式(已停用)
+  hud.css       暗角/颗粒/扫描线,以及面板的 HUD 化外观
 ```
 
 ### CSS 3D 那版还留着
 
-`src/room.rs` + `styles/room.css` 没删,只是 `lib.rs` 里不再 `mod room;`。
+`fallback/css3d.rs` + `fallback/css3d.css` 没删,它们在 `src/` 外面,所以压根不参与编译。
 要切回去:
 
-1. `<Room3D set_spot=set_spot />` 换回 `<Room set_spot=set_spot picked=spot />`;
-2. 恢复 `mod room;` 和 `use room::Room;`;
+1. 把两个文件放回 `src/` 与 `styles/`,`lib.rs` 里加回 `mod room;` 和 `use room::Room;`;
+2. `<Room3D set_spot=set_spot />` 换回 `<Room set_spot=set_spot picked=spot />`;
 3. 把 `hooks::init_room_tilt()` 加回 `main()`;
-4. `content.rs` 与 `hooks.rs` 里那两处 `#[allow(dead_code)]` 可以一并去掉。
+4. 为这条回退留的 `#[allow(dead_code)]`(`hooks.rs` 的 `init_room_tilt`、`content.rs` 的
+   `SCREEN` / `since`)可以一并去掉。
 
 ## 部署到 GitHub Pages
 
