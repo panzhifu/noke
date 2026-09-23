@@ -5,7 +5,7 @@ mod theme;
 
 use leptos::mount::mount_to_body;
 use leptos::prelude::*;
-use sections::{About, Contact, Footer, Header, Hero, Notes, Projects};
+use sections::{About, Contact, Footer, Header, Hero, Notes, Projects, Room};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -26,6 +26,7 @@ pub fn App() -> impl IntoView {
         <main>
             <Hero />
             <About />
+            <Room />
             <Projects />
             <Notes />
             <Contact />
@@ -51,4 +52,5 @@ fn main() {
     mount_to_body(App);
     remove_boot_screen();
     hooks::init_reveal();
+    hooks::init_room_tilt();
 }

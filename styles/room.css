@@ -1,0 +1,497 @@
+/* ============================================================
+   房间场景 —— 纯 CSS 3D,没有 WebGL、没有三方库。
+   坐标系:舞台 70em × 40em,进深 --depth(26em)。
+   所有尺寸用 em,改 .room 的 font-size 就整体缩放一个数。
+   ============================================================ */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.room {
+  /* 单一缩放旋钮:舞台内所有尺寸都是它的 em */
+  font-size: clamp(6.6px, 0.55vw + 4.6px, 12px);
+  display: grid;
+  place-items: center;
+  perspective: 125em;
+  perspective-origin: 50% 38%;
+  padding: 1em 0 0;
+}
+
+.room-stage {
+  position: relative;
+  width: 70em;
+  height: 40em;
+  transform-style: preserve-3d;
+  transform: rotateX(-8deg) rotateY(-11deg);
+  will-change: transform;
+  /* 给指针事件用;场景本身不吞点击 */
+  touch-action: pan-y;
+}
+
+/* 减弱动效时不消费 --rx/--ry,视差自然失效 */
+@media (prefers-reduced-motion: no-preference) {
+  .room-stage {
+    transition: transform 0.18s linear;
+    transform: rotateX(calc(-8deg + var(--rx, 0deg))) rotateY(calc(-11deg + var(--ry, 0deg)));
+  }
+}
+
+/* ---------- 墙体与地板 ---------- */
+
+.wall,
+.floor {
+  position: absolute;
+  left: 0;
+  width: 70em;
+  height: 40em;
+  transform-style: preserve-3d;
+}
+
+.wall-back {
+  top: 0;
+  transform: translateZ(calc(var(--depth) * -1));
+  background: linear-gradient(to bottom, var(--wall-hi), var(--wall) 62%);
+  box-shadow: inset 0 -1.2em 2.4em -1.4em rgb(0 0 0 / 0.35);
+}
+
+.wall-left {
+  top: 0;
+  transform-origin: left center;
+  transform: rotateY(90deg);
+  width: var(--depth);
+  background: var(--wall-lo);
+}
+
+.floor {
+  top: auto;
+  bottom: 0;
+  height: var(--depth);
+  transform-origin: bottom center;
+  transform: rotateX(90deg);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 3.2em,
+      rgb(0 0 0 / 0.16) 3.2em 3.35em
+    ),
+    linear-gradient(96deg, var(--wood-hi), var(--wood) 70%);
+}
+
+/* 顶灯在后墙上的那团光,和地板上被照亮的区域 */
+.wall-light {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(34em 22em at 26% 8%, rgb(255 255 255 / 0.13), transparent 70%);
+  pointer-events: none;
+}
+
+.rug {
+  position: absolute;
+  left: 8em;
+  bottom: -8.5em;
+  width: 38em;
+  height: 15em;
+  border-radius: 1.2em;
+  background: color-mix(in oklab, var(--accent) 16%, var(--wall-lo));
+  box-shadow: inset 0 0 0 0.7em color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+/* ---------- 通用:贴在场景里的平板与落在地上的盒子 ---------- */
+
+.prop {
+  --z: 0em;
+  --dy: 0em;
+  position: absolute;
+  bottom: 0;
+  left: var(--x, 0em);
+  width: var(--w, 10em);
+  height: var(--h, 10em);
+  transform-style: preserve-3d;
+  transform: translate3d(0, calc(var(--h) / -2 + var(--dy)), var(--z));
+}
+
+/* 平板类(海报、床头板、显示器)不需要按半高抬高 */
+.prop.flat {
+  transform: translate3d(0, var(--dy), var(--z));
+}
+
+.face {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  backface-visibility: hidden;
+  background: var(--c, var(--slate));
+}
+
+.face.top {
+  height: var(--d, 10em);
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
+  background: color-mix(in oklab, var(--c, var(--slate)) 86%, #fff);
+}
+
+.face.front {
+  transform: translateZ(calc(var(--d, 10em) / 2));
+  background: var(--c, var(--slate));
+}
+
+/* 场景往左偏,所以露出来的是右侧面 */
+.face.side {
+  width: var(--d, 10em);
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+  background: color-mix(in oklab, var(--c, var(--slate)) 76%, #000);
+}
+
+/* ---------- 床 ---------- */
+
+.bed {
+  --x: 44.5em;
+  --z: -15.5em;
+  --w: 21em;
+  --h: 5.4em;
+  --d: 20em;
+  --c: var(--linen);
+}
+
+.pillow {
+  position: absolute;
+  left: 2.4em;
+  top: calc(var(--h) / -2 - 1.1em);
+  width: 7em;
+  height: 2.2em;
+  border-radius: 0.6em;
+  transform: rotateX(90deg);
+  background: color-mix(in oklab, var(--linen) 55%, #fff);
+}
+
+.headboard {
+  --x: 44.5em;
+  --z: -25.4em;
+  --w: 21em;
+  --h: 11em;
+  background: color-mix(in oklab, var(--wood) 74%, #000);
+  border-radius: 0.8em 0.8em 0 0;
+}
+
+/* ---------- 书桌与抽屉柜 ---------- */
+
+.desk {
+  --x: 6em;
+  --z: -21em;
+  --w: 30em;
+  --h: 1.3em;
+  --d: 9em;
+  --dy: -7.9em;
+  --c: var(--wood);
+}
+
+/* 桌腿用伪元素两片薄板,省 DOM */
+.desk::before,
+.desk::after {
+  content: "";
+  position: absolute;
+  top: 0.65em;
+  width: 1.1em;
+  height: 7.25em;
+  background: color-mix(in oklab, var(--wood) 72%, #000);
+}
+
+.desk::before {
+  left: 1.2em;
+  transform: translateZ(0.5em) rotateY(90deg);
+}
+
+.desk::after {
+  right: 1.2em;
+  transform: translateZ(-0.5em) rotateY(90deg);
+}
+
+.drawer {
+  --x: 27.5em;
+  --z: -21em;
+  --w: 7.5em;
+  --h: 6.6em;
+  --d: 8.4em;
+  --c: var(--slate);
+}
+
+.drawer .face.front {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 1.9em,
+      rgb(0 0 0 / 0.3) 1.9em 2.05em
+    ),
+    var(--slate);
+}
+
+/* ---------- 显示器:屏幕上跑的是 Trove 的界面示意 ---------- */
+
+.monitor {
+  --x: 11em;
+  --z: -22.4em;
+  --w: 17.5em;
+  --h: 10.6em;
+  --dy: -9.7em;
+  display: block;
+  text-decoration: none;
+  transform-style: preserve-3d;
+}
+
+.bezel {
+  position: absolute;
+  inset: 0;
+  padding: 0.75em;
+  border-radius: 0.7em;
+  background: linear-gradient(160deg, #454b55, #23262c 70%);
+  box-shadow: 0 0.4em 1.4em -0.5em rgb(0 0 0 / 0.6);
+}
+
+.screen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.3em;
+  overflow: hidden;
+  background: var(--screen-bg);
+  color: var(--fg);
+  box-shadow: 0 0 1.6em -0.2em hsl(210 60% 60% / 0.35);
+}
+
+.screen-bar {
+  display: flex;
+  gap: 0.35em;
+  align-items: center;
+  height: 1.5em;
+  padding: 0 0.6em;
+  background: color-mix(in oklab, var(--screen-bg) 82%, #000);
+}
+
+.screen-bar i {
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--fg) 26%, transparent);
+}
+
+.screen-body {
+  display: grid;
+  grid-template-columns: 4.6em 1fr;
+  height: calc(100% - 1.5em);
+}
+
+.screen-side {
+  display: grid;
+  align-content: start;
+  gap: 0.55em;
+  padding: 0.7em 0.55em;
+  background: color-mix(in oklab, var(--screen-bg) 90%, #000);
+}
+
+.screen-side i {
+  height: 0.5em;
+  border-radius: 0.2em;
+  background: color-mix(in oklab, var(--fg) 18%, transparent);
+}
+
+.screen-side i:first-child {
+  background: color-mix(in oklab, var(--accent) 62%, transparent);
+  width: 85%;
+}
+
+.screen-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5em;
+  padding: 0.7em;
+}
+
+.thumb {
+  border-radius: 0.25em;
+  background: linear-gradient(
+    150deg,
+    hsl(var(--hue, 30) 55% 55% / 0.62),
+    hsl(var(--hue, 30) 45% 45% / 0.22)
+  );
+}
+
+.stand {
+  position: absolute;
+  left: 50%;
+  bottom: -1.8em;
+  width: 4.6em;
+  height: 1.9em;
+  margin-left: -2.3em;
+  background: #2c3037;
+  clip-path: polygon(38% 0, 62% 0, 78% 100%, 22% 100%);
+}
+
+/* 屏幕反光,让它看起来是块玻璃而不是贴纸 */
+.bezel::after {
+  content: "";
+  position: absolute;
+  inset: 0.75em;
+  border-radius: 0.3em;
+  background: linear-gradient(118deg, rgb(255 255 255 / 0.14) 0 18%, transparent 42%);
+  pointer-events: none;
+}
+
+/* ---------- 杯子、书堆 ---------- */
+
+.mug {
+  --x: 24em;
+  --z: -20.4em;
+  --w: 1.9em;
+  --h: 2.1em;
+  --d: 1.9em;
+  --c: var(--accent);
+  --dy: -7.9em;
+}
+
+.mug .face.side {
+  background: color-mix(in oklab, var(--accent) 72%, #000);
+}
+
+.bookend {
+  --x: 2em;
+  --z: -9em;
+  --w: 7em;
+  --h: 2.3em;
+  --d: 5em;
+  --c: var(--slate);
+}
+
+.bookend .face.top {
+  background: repeating-linear-gradient(
+    to right,
+    color-mix(in oklab, var(--accent) 40%, var(--linen)) 0 1.1em,
+    var(--linen) 1.1em 2.2em
+  );
+}
+
+/* ---------- 墙上的海报 ---------- */
+
+.posters {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: flex-start;
+  gap: 2.6em;
+  padding: 4.4em 0 0 5.2em;
+}
+
+.poster {
+  position: relative;
+  width: 11.5em;
+  height: 15.5em;
+  padding: 1.1em;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 0.28em solid color-mix(in oklab, var(--bg-elev) 88%, #fff);
+  border-radius: 0.2em;
+  background:
+    linear-gradient(
+      158deg,
+      hsl(var(--hue, 30) 58% 54% / 0.5),
+      hsl(var(--hue, 30) 48% 42% / 0.16) 62%,
+      transparent
+    ),
+    color-mix(in oklab, var(--bg-elev) 84%, #fff);
+  box-shadow: 0.5em 0.7em 1.4em -0.6em rgb(0 0 0 / 0.5);
+  transform: translateZ(0.35em);
+}
+
+.poster-mark {
+  font-family: var(--font-mono);
+  font-size: 6.6em;
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: color-mix(in oklab, var(--fg) 82%, transparent);
+}
+
+.poster-baseline {
+  height: 0.42em;
+  width: 62%;
+  background: color-mix(in oklab, var(--fg) 34%, transparent);
+}
+
+/* 空位:等你的真海报 */
+.poster.blank {
+  background: color-mix(in oklab, var(--bg-elev) 90%, #fff);
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--fg) 30%, transparent);
+  align-items: center;
+  justify-content: center;
+}
+
+.poster.blank::after {
+  content: "海报位";
+  font-family: var(--font-mono);
+  font-size: 1.15em;
+  letter-spacing: 0.12em;
+  color: color-mix(in oklab, var(--fg) 42%, transparent);
+}
+
+.room-caption {
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+  margin: 20px 0 0;
+}
+
+/* ---------- 场景用的颜色(接主样式的两套主题) ---------- */
+
+html[data-theme="dark"] .room-stage {
+  --depth: 26em;
+  --wall: #262b34;
+  --wall-hi: #2e343e;
+  --wall-lo: #1c2026;
+  --wood: #584136;
+  --wood-hi: #6b5141;
+  --slate: #333a44;
+  --linen: #6d7686;
+  --screen-bg: #14171c;
+}
+
+html[data-theme="light"] .room-stage {
+  --depth: 26em;
+  --wall: #efeade;
+  --wall-hi: #f6f2e8;
+  --wall-lo: #ded7c7;
+  --wood: #c3a077;
+  --wood-hi: #d4b58c;
+  --slate: #b9bcc2;
+  --linen: #dfe3ea;
+  --screen-bg: #fbfaf6;
+}
+
+/* 窄屏:把相机摆正一点,少丢细节;左侧墙与书堆退场 */
+@media (max-width: 720px) {
+  .room-stage,
+  .room-stage:is(:hover) {
+    transform: rotateX(-6deg) rotateY(-4deg);
+  }
+
+  .wall-left,
+  .bookend,
+  .rug {
+    display: none;
+  }
+
+  .posters {
+    gap: 1.4em;
+    padding-left: 3em;
+  }
+
+  .poster {
+    width: 9.4em;
+    height: 12.6em;
+  }
+}

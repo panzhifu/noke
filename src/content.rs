@@ -14,19 +14,24 @@ pub const NAV: &[NavItem] = &[
         index: "01",
     },
     NavItem {
+        id: "room",
+        label: "房间",
+        index: "02",
+    },
+    NavItem {
         id: "projects",
         label: "作品",
-        index: "02",
+        index: "03",
     },
     NavItem {
         id: "notes",
         label: "手记",
-        index: "03",
+        index: "04",
     },
     NavItem {
         id: "contact",
         label: "联系",
-        index: "04",
+        index: "05",
     },
 ];
 
@@ -111,6 +116,23 @@ pub const STACK: &[&str] = &[
     "Trunk",
     "TypeScript",
 ];
+
+/// 房间场景里墙上那几张海报的字面标记 —— 是我排的三个占位版式。
+/// 换成真海报:把文件放进 `assets/`,再把 room.rs 里的 `.poster` 换成 `<img src="assets/xxx.png">`。
+pub const POSTER_MARKS: &[&str] = &["n", "o", "k"];
+
+pub struct Screen {
+    pub app: &'static str,
+    pub url: &'static str,
+    pub caption: &'static str,
+}
+
+/// 书桌上那块屏幕:界面上的软件与它链向哪。
+pub const SCREEN: Screen = Screen {
+    app: "Trove",
+    url: "https://github.com/panzhifu/trove",
+    caption: "屏幕上跑的是 Trove 的界面示意:左栏集合,右边素材网格。点它去仓库。",
+};
 
 pub struct Project {
     pub name: &'static str,

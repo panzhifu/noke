@@ -25,7 +25,7 @@ pub fn Contact() -> impl IntoView {
         .collect::<Vec<_>>();
 
     view! {
-        <Section id="contact" index="04" title="联系" kicker="邮件最好使">
+        <Section id="contact" index="05" title="联系" kicker="邮件最好使">
             <p class="contact-lead">
                 { "项目合作、Bug 反馈,或者只是想聊聊 Rust —— 都欢迎写信。通常一两天内回。" }
             </p>

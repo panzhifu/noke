@@ -4,6 +4,7 @@ mod header;
 mod hero;
 mod notes;
 mod projects;
+mod room;
 
 pub use about::About;
 pub use contact::{Contact, Footer};
@@ -11,6 +12,7 @@ pub use header::Header;
 pub use hero::Hero;
 pub use notes::Notes;
 pub use projects::Projects;
+pub use room::Room;
 
 use leptos::prelude::*;
 

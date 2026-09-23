@@ -26,6 +26,18 @@ trunk build --release              # 产物在 dist/
 - 新增区块:在 `src/sections/` 里加一个模块,用 `Section` 外壳组件,然后在 `src/lib.rs` 的 `<main>` 里挂上,
   并把它注册进 `src/content.rs` 的 `NAV`(导航高亮按 `id` 匹配)。
 
+## 房间场景(styles/room.css)
+
+第二个区块是一间用纯 CSS 3D 搭的房间:书桌上有显示器(屏幕里是 Trove 的界面示意,点它去仓库)、
+一张床、墙上四张海报位。没有 WebGL、没有三方库,场景本身只有 12KB CSS。
+
+- 想换成你设计的海报:把文件放进 `assets/`,再把 `src/sections/room.rs` 里的 `.poster` 换成
+  `<img src="assets/你的海报.png">`;那张虚线框是留给你的空位。
+- 几何全在 `room.css` 里用自定义属性描述:`--x`(左右)、`--z`(进深)、`--w/--h/--d`(盒子的长宽高),
+  单位都是 em;改 `.room` 的 `font-size` 就是整体缩放。
+- 相机的基准角度在 `.room-stage` 的 `transform`,鼠标视差由 `src/hooks.rs` 写成 `--rx/--ry` 两个变量、
+  由 CSS 在 `prefers-reduced-motion: no-preference` 下消费(所以关闭动效时视差自然失效)。
+
 ## 部署到 GitHub Pages
 
 线上地址:https://panzhifu.github.io/noke/
@@ -60,8 +72,11 @@ python3 -m http.server -d /tmp/noke-preview 8000   # 打开 http://localhost:800
 ## 已验证
 
 线上 https://panzhifu.github.io/noke/ 用真实产物逐项跑过:深浅色主题切换与 localStorage 持久化、
-作品标签筛选、移动端抽屉、滚动导航高亮、阅读进度条、复制邮箱、四张卡片外链;控制台无报错
+作品标签筛选、移动端抽屉、滚动导航高亮、阅读进度条、复制邮箱、卡片外链;控制台无报错
 (仅 Chrome 对 wasm 的 preload 不支持 SRI 的一条提示,来自 Trunk 注入的 `integrity`,无害)。
-`cargo clippy` / `cargo fmt --check` 零警告;wasm 220KB(gzip 约 92KB)。
+房间场景查过:舞台是真 3D(`matrix3d` + `perspective`),投影后的相对位置正确(屏幕在桌面之上、
+床在书桌右侧),视差角度钳在 ±7°/±3.5° 且离开时归零,窄屏撤掉左墙/书堆/地毯。
+`cargo clippy` / `cargo fmt --check` 零警告;wasm 240KB(线上实测传输约 100KB gzip)。
 
-未做的:没有可见表面可以截图,所以视觉观感(留白、字号是否耐看)没有人工确认过。
+未做的:内置浏览器面板是 0×0 隐藏表面,拿不到截图,所以**视觉观感(尤其三列铺开和房间的光影层次)
+没有人工看过** —— 上面这些是结构与计算样式层面的验证。

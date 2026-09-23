@@ -27,7 +27,6 @@ fn visible(tag: &'static str) -> Vec<(usize, &'static Project)> {
         .iter()
         .enumerate()
         .filter(|(_, project)| tag == ALL || project.tags.contains(&tag))
-        .map(|(index, project)| (index, project))
         .collect()
 }
 
@@ -99,7 +98,7 @@ pub fn Projects() -> impl IntoView {
         .collect::<Vec<_>>();
 
     view! {
-        <Section id="projects" index="02" title="作品" kicker="还在维护的那些">
+        <Section id="projects" index="03" title="作品" kicker="还在维护的那些">
             <div class="filters" role="group" aria-label="按标签筛选">{ filters }</div>
 
             // 只剩一两张时锁列数,否则多列布局会把它们挤在左侧一条里。

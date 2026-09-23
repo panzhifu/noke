@@ -135,6 +135,52 @@ pub fn init_reveal() {
     callback.forget();
 }
 
+/// 房间场景的视差:把指针位置写成 --rx / --ry 挂在舞台上,旋转本身交给 CSS。
+/// 减弱动效时 CSS 压根不读这两个变量(room.css 的 no-preference 查询),所以这里不需要分支。
+pub fn init_room_tilt() {
+    let Some(stage) = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|doc| doc.get_element_by_id("room-stage"))
+        // style 属性挂在 HTMLElement 上,所以先窄化一次类型
+        .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok())
+    else {
+        return;
+    };
+
+    let tracked = stage.clone();
+    let on_move = Closure::wrap(Box::new(move |ev: web_sys::PointerEvent| {
+        let rect = tracked.get_bounding_client_rect();
+        // 钳到 ±0.5:元素被滚出指针时也不会转出离谱角度(上限 ±7° / ±3.5°)
+        let nx =
+            ((ev.client_x() as f64 - rect.left()) / rect.width().max(1.0) - 0.5).clamp(-0.5, 0.5);
+        let ny =
+            ((ev.client_y() as f64 - rect.top()) / rect.height().max(1.0) - 0.5).clamp(-0.5, 0.5);
+        let style = tracked.style();
+        style
+            .set_property("--ry", &format!("{:.2}deg", nx * 14.0))
+            .ok();
+        style
+            .set_property("--rx", &format!("{:.2}deg", -ny * 7.0))
+            .ok();
+    }) as Box<dyn FnMut(web_sys::PointerEvent)>);
+
+    let resting = stage.clone();
+    let on_leave = Closure::wrap(Box::new(move || {
+        let style = resting.style();
+        style.set_property("--rx", "0deg").ok();
+        style.set_property("--ry", "0deg").ok();
+    }) as Box<dyn FnMut()>);
+
+    stage
+        .add_event_listener_with_callback("pointermove", on_move.as_ref().unchecked_ref())
+        .ok();
+    stage
+        .add_event_listener_with_callback("pointerleave", on_leave.as_ref().unchecked_ref())
+        .ok();
+    on_move.forget();
+    on_leave.forget();
+}
+
 /// web-sys 还没为异步剪贴板生成绑定,这里直接走 Reflect。
 fn write_clipboard(window: &web_sys::Window, text: &str) -> bool {
     let navigator = window.navigator();

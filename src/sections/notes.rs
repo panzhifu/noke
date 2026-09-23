@@ -31,7 +31,7 @@ pub fn Notes() -> impl IntoView {
     };
 
     view! {
-        <Section id="notes" index="03" title="手记" kicker="长文在博客,这里只留索引">
+        <Section id="notes" index="04" title="手记" kicker="长文在博客,这里只留索引">
             <ul class="note-list">{ items }</ul>
             <p class="muted">{ body }</p>
             <p class="section-foot">
