@@ -3,7 +3,7 @@ mod hooks;
 mod room;
 mod ui;
 
-use content::{COLOPHON, HUD_HINTS, SITE};
+use content::SITE;
 use leptos::mount::mount_to_body;
 use leptos::prelude::*;
 use room::Room3D;
@@ -17,20 +17,8 @@ pub fn App() -> impl IntoView {
     let (spot, set_spot) = signal::<Option<Spot>>(None);
     hooks::on_escape(set_spot);
 
-    let hints = HUD_HINTS
-        .iter()
-        .map(|(key, what)| {
-            view! {
-                <span>
-                    <kbd>{ *key }</kbd>
-                    { *what }
-                </span>
-            }
-        })
-        .collect::<Vec<_>>();
-
+    // 页面上不留文字:名字与标语只给读屏和搜索引擎,看得见的部分只有房间和几个图标。
     view! {
-        // 名字与标语交给场景与 meta;这一行只给读屏和搜索引擎。
         <h1 class="sr-only">{ format!("{} —— {} · {}", SITE.name, SITE.role, SITE.tagline) }</h1>
 
         <Room3D set_spot=set_spot />
@@ -43,7 +31,6 @@ pub fn App() -> impl IntoView {
         </div>
 
         <div class="topbar">
-            <span class="topbar-hint">{ format!("{} · {}", SITE.name, SITE.role) }</span>
             <button
                 type="button"
                 class="icon-btn"
@@ -63,13 +50,10 @@ pub fn App() -> impl IntoView {
             </button>
         </div>
 
+        // 键盘/读屏的入口:看得见的那部分只有图标,这一条整条只在聚焦时显形。
         <EntryBar set_spot=set_spot />
 
-        <div class="hud-hints" aria-hidden="true">{ hints }</div>
-
         <Panel spot=spot set_spot=set_spot />
-
-        <p class="colophon">{ format!("{COLOPHON} · 自 {} 起", SITE.since) }</p>
     }
 }
 

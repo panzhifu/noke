@@ -1,12 +1,13 @@
 use leptos::prelude::*;
 
-use crate::content::{ENTRY_NOTE, POSTER_MARKS};
+use crate::content::POSTER_MARKS;
 use crate::ui::panel::Spot;
 
-/// 还没搬进 3D 的那几格入口。
+/// 键盘和读屏用的入口条。
 ///
-/// 家具会陆续带上 `spot` 字段变得能点(现在只有桌子),但这条要留着 ——
-/// 3D 场景是 `aria-hidden` 的,键盘和读屏只能靠这里进。
+/// 家具会陆续带上 `spot` 字段变得能点(现在只有桌子),但这一条要留着 ——
+/// 3D 场景是 `aria-hidden` 的,而且页面上不再留文字,键盘只有这里能进。
+/// 整条默认隐形,聚焦时才显形(见 room3d.css)。
 const MAIN_ENTRIES: &[(&str, Spot)] = &[
     ("作品", Spot::Work),
     ("关于", Spot::About),
@@ -42,8 +43,7 @@ pub fn EntryBar(set_spot: WriteSignal<Option<Spot>>) -> impl IntoView {
         .collect::<Vec<_>>();
 
     view! {
-        <nav class="entry-bar" aria-label="站点入口">
-            <span class="entry-note">{ ENTRY_NOTE }</span>
+        <nav class="entry-bar sr-only" aria-label="站点入口">
             <span class="entry-row">
                 { main }
                 { posters }

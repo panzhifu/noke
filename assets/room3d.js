@@ -12,10 +12,11 @@
  *
  * 空间感靠这几件事凑出来，没有一样需要后处理 pass：
  * 两面墙把角落封住、雾让地面远处化进背景、一盏反向补光压住死黑、
- * 暗角与颗粒在 hud.css 里用 CSS 叠一层、hover 有 emissive 高亮 + monospace 标签。
+ * 暗角与颗粒在 hud.css 里用 CSS 叠一层、能点的家具 hover 时亮一下(emissive)+ 指针变手型。
  *
  * 旋转交给 OrbitControls（同类开源房间站都是这么做的），角度钳位：
- * 墙是单面片，转到墙背后会直接看穿，所以方位角/俯角不许越界。
+ * 墙是单面片，转到墙背后会直接看穿，所以方位角/俯角都许动不许越界。
+ * 默认是平视（CAMERA_PITCH 只有几度），往上最多到 30° 俯角，不给出俯瞰的角度。
  */
 
 import * as THREE from 'three';
@@ -32,12 +33,11 @@ const TARGET_EASE = 0.07;
 const ANISOTROPY = 8;
 // 拖过这几个像素就不算「点一下」,否则每次转完视角都会误开面板
 const DRAG_THRESHOLD = 6;
-// 镜头钳位(度):俯角不到 25° 会看到地板背面;方位角限制在两面墙的正面一侧
+// 镜头钳位:极角(从 +Y 量起,度)。60 = 从上往下 30° 俯角,88 = 基本与视线齐平 ——
+// 再往 90 去镜头就要沉到地毯下面去了;方位角限制在两面墙的正面一侧。
 // 长焦取景:fov 越小,透视变形越弱,3D 越不像"玩具盒子"(参考 p3d 的 fov 25)
 const CAMERA_FOV = 29;
-// 俯角锁死:true 时拖拽只能水平转,不存在转到露馅的角度;false 才用下面的区间
-const POLAR_LOCK = true;
-const POLAR_LIMITS = [25, 72];
+const POLAR_LIMITS = [60, 88];
 const AZIMUTH_LIMITS = [-20, 66];
 const DISTANCE_RANGE = [0.6, 1.35]; // × 取景距离
 // hover 时往材质里加的一点自发光(琥珀色),浅背景上够显眼又不刺眼
@@ -68,20 +68,6 @@ function palette() {
     fill: dark ? 0xbcd0f0 : 0xdce8ff,
     fillIntensity: dark ? 0.34 : 0.5,
   };
-}
-
-// 标签文字的唯一来源是 panel.rs 的 spot_label;这里只做 spot 字符串 → 中文的映射
-const SPOT_LABELS = {
-  work: '作品',
-  about: '关于',
-  notes: '手记',
-  contact: '联系',
-};
-
-function spotLabel(spot) {
-  if (!spot) return '';
-  if (spot.startsWith('poster:')) return `海报 ${spot.slice(7)}`;
-  return SPOT_LABELS[spot] || spot;
 }
 
 function readManifest(host) {
@@ -200,8 +186,9 @@ function createFloor(colors, span, center) {
   return floor;
 }
 
-/** 俯角固定,距离按场景包围盒算 —— 换地毯尺寸或往后添家具,构图都自己跟上。 */
-const CAMERA_PITCH = deg(50);
+/** 默认俯角固定,距离按场景包围盒算 —— 换地毯尺寸或往后添家具,构图都自己跟上。 */
+// 平视:镜头比水平线只低几度(距离 7 m 上下时,大约就是一个人站着看房间的高度)
+const CAMERA_PITCH = deg(8);
 const CAMERA_FILL = 1.05;
 
 function fitCamera(camera, host, center, size) {
@@ -328,10 +315,8 @@ function start(host) {
   controls.dampingFactor = 0.08;
   controls.rotateSpeed = 0.6;
   controls.zoomSpeed = 0.5;
-  // 锁定值 = 取景俯角对应的极角,和 refit 里首次摆位的角度一致,不会自相矛盾
-  const fittedPolar = Math.PI / 2 - CAMERA_PITCH;
-  controls.minPolarAngle = POLAR_LOCK ? fittedPolar : deg(POLAR_LIMITS[0]);
-  controls.maxPolarAngle = POLAR_LOCK ? fittedPolar : deg(POLAR_LIMITS[1]);
+  controls.minPolarAngle = deg(POLAR_LIMITS[0]);
+  controls.maxPolarAngle = deg(POLAR_LIMITS[1]);
   controls.minAzimuthAngle = deg(AZIMUTH_LIMITS[0]);
   controls.maxAzimuthAngle = deg(AZIMUTH_LIMITS[1]);
 
@@ -348,16 +333,12 @@ function start(host) {
   let placed = false;
   let reduced = motionQuery.matches;
   let loop = 0;
+  let drawing = false;
   let hovered = null;
   let focused = null;
   let dragging = null;
   const parallax = { x: 0, y: 0, tx: 0, ty: 0 };
   const targetGoal = new THREE.Vector3();
-
-  const label = document.createElement('div');
-  label.className = 'obj-label';
-  label.hidden = true;
-  host.appendChild(label);
 
   const renderOnce = () => renderer.render(scene, camera);
 
@@ -379,36 +360,62 @@ function start(host) {
   const settled = () =>
     Math.abs(parallax.tx - parallax.x) < EPS && Math.abs(parallax.ty - parallax.y) < EPS;
 
+  const num = (value) => Number(value.toFixed(2));
+
+  /**
+   * 核对用的镜头读数。写的是极角(度)与俯角(=90-极角)、相机与注视点的高度、
+   * 到注视点的距离 —— 一眼能看出「这是平视还是俯瞰」,以及相机有没有沉到地板上。
+   */
+  const readout = () => {
+    const polar = THREE.MathUtils.radToDeg(controls.getPolarAngle());
+    const offset = camera.position.clone().sub(controls.target);
+    return {
+      az: num(THREE.MathUtils.radToDeg(controls.getAzimuthalAngle())),
+      polar: num(polar),
+      pitch: num(90 - polar),
+      camY: num(camera.position.y),
+      targetY: num(controls.target.y),
+      dist: num(offset.length()),
+      fov: camera.fov,
+    };
+  };
+
   const draw = () => {
     loop = 0;
-    if (!reduced && !settled()) {
-      // 视差是「自己动」的那部分,所以它才是该被减弱动效关掉的;
-      // 阻尼和拖拽属于「跟着手动」,任何时候都得响应。
-      parallax.x += (parallax.tx - parallax.x) * PARALLAX_EASE;
-      parallax.y += (parallax.ty - parallax.y) * PARALLAX_EASE;
-      rig.rotation.y = parallax.x;
-      rig.rotation.x = parallax.y;
-    }
-    controls.target.lerp(targetGoal, TARGET_EASE);
-    controls.update();
-    renderOnce();
-    updateLabel();
-    const now = signature();
-    quiet = now === last ? quiet + 1 : 0;
-    last = now;
-    if (quiet < QUIET_FRAMES) {
-      loop = requestAnimationFrame(draw);
-    } else {
-      // 停下来时把累计帧数写出去,好核对「真的停了」
-      host.dataset.frames = String(renderer.info.render.frame);
-      // 停下时把水平角度也写出去:核对「拖拽确实转了相机」
-      host.dataset.view = controls.getAzimuthalAngle().toFixed(3);
+    // 一帧里 controls.update() 会同步派发 change → 又回调 invalidate():
+    // 此刻 loop 刚清 0,守卫挡不住,同一帧会被排两次画面。
+    drawing = true;
+    try {
+      if (!reduced && !settled()) {
+        // 视差是「自己动」的那部分,所以它才是该被减弱动效关掉的;
+        // 阻尼和拖拽属于「跟着手动」,任何时候都得响应。
+        parallax.x += (parallax.tx - parallax.x) * PARALLAX_EASE;
+        parallax.y += (parallax.ty - parallax.y) * PARALLAX_EASE;
+        rig.rotation.y = parallax.x;
+        rig.rotation.x = parallax.y;
+      }
+      controls.target.lerp(targetGoal, TARGET_EASE);
+      controls.update();
+      renderOnce();
+      const now = signature();
+      quiet = now === last ? quiet + 1 : 0;
+      last = now;
+      if (quiet < QUIET_FRAMES) {
+        loop = requestAnimationFrame(draw);
+      } else {
+        // 停下来时把累计帧数写出去,好核对「真的停了」
+        host.dataset.frames = String(renderer.info.render.frame);
+        // 停下时把镜头读数写出去:核对「拖拽确实转了相机、俯角没跑上去」
+        host.dataset.view = JSON.stringify(readout());
+      }
+    } finally {
+      drawing = false;
     }
   };
 
   const invalidate = () => {
     quiet = 0;
-    if (!loop) loop = requestAnimationFrame(draw);
+    if (!loop && !drawing) loop = requestAnimationFrame(draw);
   };
 
   const applyFog = () => {
@@ -498,21 +505,6 @@ function start(host) {
     const mesh = hit ? hit.object : null;
     if (updateHover) setHovered(mesh);
     return mesh;
-  };
-
-  /** 标签贴在物件上方的锚点,每帧投影 —— 镜头转起来它也跟着走。 */
-  const updateLabel = () => {
-    if (!hovered) {
-      label.hidden = true;
-      return;
-    }
-    const anchor = hovered.userData.anchor || new THREE.Vector3();
-    const point = anchor.clone().applyMatrix4(hovered.matrixWorld).project(camera);
-    const box = host.getBoundingClientRect();
-    label.style.transform =
-      `translate(-50%, -100%) translate(${((point.x + 1) / 2) * box.width}px, ${((1 - point.y) / 2) * box.height}px)`;
-    label.textContent = hovered.userData.label || spotLabel(hovered.userData.spot);
-    label.hidden = false;
   };
 
   host.addEventListener('pointermove', (event) => {
@@ -625,14 +617,6 @@ function start(host) {
       walls = createWalls(colors, size, center);
       scene.add(walls.group);
 
-      // hover 标签的锚点:取每个可点物件自己的上沿
-      for (const mesh of pickables) {
-        const box = new THREE.Box3().setFromObject(mesh);
-        mesh.updateWorldMatrix(true, false);
-        mesh.userData.anchor = mesh.worldToLocal(box.max.clone());
-        mesh.userData.label = spotLabel(mesh.userData.spot);
-      }
-
       resize();
       // 提前编译着色器(对应 drei 的 <Preload all />):否则第一次出现某个材质时掉一帧
       renderer.compile(scene, camera);
@@ -647,7 +631,6 @@ function start(host) {
         walls: 2,
         fog: true,
         controls: 'orbit',
-        polarLock: POLAR_LOCK,
         fov: CAMERA_FOV,
         demandRendering: true,
         // 装配完立刻的累计帧数:证明 boot 阶段没有连画一堆帧(静置后是否真停下,

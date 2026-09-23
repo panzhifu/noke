@@ -64,64 +64,14 @@ html[data-theme="light"] .hud-vignette {
   }
 }
 
-/* ---------- 四角文字 ---------- */
+/* ---------- 等宽的字形:整站只剩面板头部和入口条 ---------- */
 
 .topbar,
-.entry-bar,
-.colophon {
-  font-family: var(--font-mono);
-}
-
-.topbar {
-  padding: 18px 22px 0;
-  letter-spacing: 0.05em;
-}
-
-.topbar-hint {
-  font-size: 11px;
-  text-transform: none;
-}
-
-/* 右下角的操作提示:告诉人可以拖、可以点 */
-.hud-hints {
-  position: fixed;
-  right: 22px;
-  bottom: 18px;
-  z-index: 16;
-  display: grid;
-  gap: 3px;
-  justify-items: end;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.hud-hints kbd {
-  font: inherit;
-  padding: 1px 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--bg-elev) 62%, transparent);
-  color: var(--fg);
-}
-
-body:has(> .hud-hints) > .colophon {
-  padding-right: 11rem;
-}
-
-/* ---------- 入口:从药丸改成方角小框,更像终端 ---------- */
-
 .entry-bar {
-  align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.72rem;
+  font-family: var(--font-mono);
 }
 
-.entry-row {
-  gap: 0.4rem;
-}
+/* ---------- 入口:药丸改成方角小框,更像终端 ---------- */
 
 .entry {
   padding: 0.34rem 0.7rem;
@@ -136,36 +86,6 @@ body:has(> .hud-hints) > .colophon {
 .entry:focus-visible {
   border-color: var(--accent);
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-elev));
-}
-
-/* ---------- hover 标签:贴在 3D 物件上方 ---------- */
-
-.obj-label {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 2;
-  padding: 2px 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--bg) 84%, transparent);
-  backdrop-filter: blur(6px);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  white-space: nowrap;
-  color: var(--fg);
-  pointer-events: none;
-}
-
-.obj-label::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -5px;
-  width: 1px;
-  height: 5px;
-  background: var(--line-strong);
 }
 
 /* ---------- 面板:桌面端是右上角的 HUD 卡片,窄屏仍是底部抽屉 ---------- */
@@ -206,10 +126,6 @@ body:has(> .hud-hints) > .colophon {
   color: var(--accent);
 }
 
-.panel-close {
-  font-size: 10.5px;
-}
-
 .panel-body {
   padding: 14px;
   font-size: 14px;
@@ -226,13 +142,5 @@ body:has(> .hud-hints) > .colophon {
   .panel {
     width: 100%;
     max-height: min(58dvh, 440px);
-  }
-
-  .hud-hints {
-    display: none;
-  }
-
-  body:has(> .hud-hints) > .colophon {
-    padding-right: 0.9rem;
   }
 }

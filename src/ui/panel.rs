@@ -28,7 +28,32 @@ fn is(spot: Option<Spot>, want: Spot) -> bool {
     spot == Some(want)
 }
 
-/// 点房间里的物件时,对应那一格浮出来。五格常驻 DOM,靠显隐切换 ——
+/// 翻页顺序:页面上不留文字之后,手记/联系这些没有对应家具的格子靠这两个箭头到达。
+const SPOTS: &[Spot] = &[
+    Spot::Work,
+    Spot::About,
+    Spot::Notes,
+    Spot::Contact,
+    Spot::Poster(0),
+];
+
+fn shift(current: Option<Spot>, delta: isize) -> Spot {
+    let index = current
+        .map(|spot| {
+            SPOTS
+                .iter()
+                .position(|candidate| match (*candidate, spot) {
+                    (Spot::Poster(_), Spot::Poster(_)) => true,
+                    (a, b) => a == b,
+                })
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    let next = (index as isize + delta).rem_euclid(SPOTS.len() as isize) as usize;
+    SPOTS[next]
+}
+
+/// 点房间里的物件、或按面板上的左右箭头翻页时,对应那一格浮出来。五格常驻 DOM,靠显隐切换 ——
 /// 切换时不重建内容,也省掉一套动态视图类型。
 #[component]
 pub fn Panel(spot: ReadSignal<Option<Spot>>, set_spot: WriteSignal<Option<Spot>>) -> impl IntoView {
@@ -144,11 +169,25 @@ pub fn Panel(spot: ReadSignal<Option<Spot>>, set_spot: WriteSignal<Option<Spot>>
         <div class="panel-layer" class:open=move || spot.get().is_some()>
             <aside class="panel" role="region" aria-label="物件详情">
                 <header class="panel-head">
+                    <span class="panel-pager">
+                        <button type="button" class="pager" aria-label="上一格" on:click=move |_| set_spot.set(Some(shift(spot.get(), -1)))>
+                            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                <path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                            </svg>
+                        </button>
+                        <button type="button" class="pager" aria-label="下一格" on:click=move |_| set_spot.set(Some(shift(spot.get(), 1)))>
+                            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                <path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                            </svg>
+                        </button>
+                    </span>
                     <h2 class="panel-title">
                         { move || spot.get().map(spot_label).unwrap_or("") }
                     </h2>
-                    <button type="button" class="panel-close" on:click=close aria-label="关闭面板">
-                        { "关闭 · Esc" }
+                    <button type="button" class="panel-close" on:click=close aria-label="关闭面板 · Esc">
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                            <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                        </svg>
                     </button>
                 </header>
 
@@ -194,7 +233,6 @@ pub fn Panel(spot: ReadSignal<Option<Spot>>, set_spot: WriteSignal<Option<Spot>>
                     <div class="pane" class:pane-off=move || !matches!(spot.get(), Some(Spot::Poster(_)))>
                         <div class="mini-row">{ posters }</div>
                         <p class="pane-lead">{ POSTER_CAPTION }</p>
-                        <p class="pane-foot">{ "改 src/content.rs 的 POSTER_MARKS,或直接把 room.rs 里的 .poster 换成 <img>。" }</p>
                     </div>
                 </div>
             </aside>

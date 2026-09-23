@@ -9,6 +9,8 @@ pub struct Site {
     pub email: &'static str,
     pub github: &'static str,
     pub blog: &'static str,
+    /// 页面上不留文字后没有地方放它,先当资料留着。
+    #[allow(dead_code)]
     pub since: &'static str,
 }
 
@@ -194,26 +196,13 @@ pub const NOTES: &[Note] = &[Note {
 }];
 
 /// 墙上的海报位:这几张是我排的字面占版式。
-/// 换成真海报:把文件放进 `assets/`,再把 room.rs 里的 `.poster` 换成 `<img src="assets/xxx.png">`。
+/// 换成真海报:把文件放进 `assets/models/`,像其他家具一样给清单加一条。
 pub const POSTER_MARKS: &[&str] = &["n", "k"];
 
-pub const POSTER_CAPTION: &str =
-    "墙上这三张是占位版式。把你设计的海报放进 assets/ 换上就行 —— 右边那张虚线框就是留给你的位置。";
+pub const POSTER_CAPTION: &str = "海报还在做,墙上先占两格版式。";
 
 /// 房间里的海报、屏幕缩略图、面板里的迷你海报共用一套色相:
 /// 黄金角散列让相邻两块不撞色,起点 26° 对齐本站强调色。
 pub fn hue_at(index: usize) -> u16 {
     ((26.0 + index as f32 * 137.508) % 360.0).round() as u16
 }
-
-pub const COLOPHON: &str = "本站是一间用 Three.js 搭的房间 · 家具模型在 Blender 里做 · Leptos 编译成 WebAssembly · GitHub Pages · 无 Cookie、无追踪、无后端";
-
-/// 入口条上那句话。家具一个个能被点之后,这句可以跟着改。
-pub const ENTRY_NOTE: &str = "桌子能直接点(它开作品);其余入口先借这条。";
-
-/// 右下角的操作提示:(键/动作, 结果)
-pub const HUD_HINTS: &[(&str, &str)] = &[
-    ("拖拽", "转动视角"),
-    ("点家具", "打开对应格子"),
-    ("Esc", "收起"),
-];

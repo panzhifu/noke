@@ -76,7 +76,9 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  /* 1:压在 .room3d(画布升到 z-index 0 才收得到拖拽)之上,保持这层辉光一直
+     是叠在场景上的 */
+  z-index: 1;
   background: radial-gradient(62rem 34rem at 78% -14%, var(--glow), transparent 70%);
 }
 
@@ -134,7 +136,7 @@ code {
   100% { transform: rotate(360deg) scale(0.9); opacity: 0.55; }
 }
 
-/* ---------- 顶栏:一句提示 + 主题开关 ---------- */
+/* ---------- 顶栏:只剩主题开关 ---------- */
 
 .topbar {
   position: relative;
@@ -143,16 +145,9 @@ code {
   max-width: 1100px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding: 16px 22px 0;
-}
-
-.topbar-hint {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.09em;
-  color: var(--muted);
 }
 
 .icon-btn {
@@ -178,22 +173,6 @@ html[data-theme="dark"] .icon-sun { display: block; }
 html[data-theme="dark"] .icon-moon { display: none; }
 html[data-theme="light"] .icon-sun { display: none; }
 html[data-theme="light"] .icon-moon { display: block; }
-
-/* ---------- 页脚一句话 ---------- */
-
-.colophon {
-  position: relative;
-  z-index: 2;
-  margin: 0;
-  padding: 12px 22px max(14px, env(safe-area-inset-bottom));
-  max-width: 72ch;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
-  line-height: 1.7;
-  color: var(--muted);
-}
 
 /* ---------- 面板:点物件后从下方浮起 ---------- */
 
@@ -247,20 +226,31 @@ html[data-theme="light"] .icon-moon { display: block; }
   font-weight: 620;
 }
 
-.panel-close {
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  padding: 2px 0;
+/* 面板头部全是图标:左右翻页 + 关闭,没有文字 */
+.panel-pager {
+  display: flex;
+  gap: 2px;
 }
 
+.pager,
+.panel-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+
+.pager:hover,
 .panel-close:hover {
   color: var(--accent);
+  border-color: var(--line);
+  background: var(--bg-elev-2);
 }
 
 .panel-body {
@@ -540,10 +530,6 @@ html[data-theme="light"] .icon-moon { display: block; }
 @media (max-width: 720px) {
   .topbar {
     padding-top: 12px;
-  }
-
-  .topbar-hint {
-    font-size: 10.5px;
   }
 
   .panel {

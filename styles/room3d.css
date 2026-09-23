@@ -9,9 +9,11 @@
 .room3d {
   position: fixed;
   inset: 0;
-  /* -1:沉到所有内容底下,否则 fixed 定位会盖住 static 的顶栏和页脚。
-     body 没建层叠上下文,所以它仍然在 body 背景之上。 */
-  z-index: -1;
+  /* 0,不是 -1。负 z-index 时画布收不到任何拖拽:CSS 绘制顺序里负层级的堆叠上下文
+     先画,in-flow 的 body 盒子后画,命中测试按反序走 —— elementFromPoint 在房间
+     中央返回的是 BODY,而 OrbitControls 绑在画布上,一个 pointerdown 都拿不到。
+     置 0 后画布压在 body 之上、各 UI 层(z-index 2+)之下:能拖,也不挡顶栏和入口条。 */
+  z-index: 0;
   /* 模型到位之前先给个底色,免得闪一下白 */
   background: var(--bg);
 }
@@ -23,49 +25,32 @@
   touch-action: none;
 }
 
-/* 页脚钉在最后一行,不受前面多一个/少一个元素的影响。
-   它会压在 3D 场景上,得给一层底衬才读得清。 */
-body:has(> .room3d) > .colophon {
-  grid-row: 4;
-  padding: 0.32rem 0.9rem;
-  border-radius: var(--r-sm);
-  background: color-mix(in oklab, var(--bg) 74%, transparent);
-  backdrop-filter: blur(8px);
-}
+/* ---------- 入口条:整条隐形,键盘 Tab 进来才显形 ---------- */
 
-/* ---------- 入口条:家具还没搬进 3D 之前,先用它顶着 ---------- */
-
-/* 3D 层不占 grid 行,所以页面结构得重排:顶栏 / 入口条 / 场景(占满剩余) / 页脚。
-   入口条放上面而不是下面 —— 放下面会压住地毯的底边,而地毯是眼下唯一的主角。 */
-body:has(> .room3d) {
-  grid-template-rows: auto auto 1fr auto;
-}
-
+/* 页面上不留文字之后,这条只服务键盘和读屏。锚在左上角,不占 grid 行 ——
+   场景铺满视口,没有哪一行是留给它的。 */
 .entry-bar {
-  grid-row: 2;
-  align-self: start;
+  top: 14px;
+  left: 14px;
+  z-index: 30;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.62rem;
-  max-width: min(92vw, 44rem);
-  margin-bottom: 0.4rem;
-  font-size: 0.78rem;
+  gap: 0.4rem;
+  font-size: 0.72rem;
   color: var(--muted);
-  text-align: center;
-  pointer-events: none;
 }
 
-.entry-note {
-  opacity: 0.72;
+.entry-bar:focus-within {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
 }
 
 .entry-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  pointer-events: auto;
+  gap: 0.4rem;
 }
 
 .entry {
@@ -92,13 +77,8 @@ body:has(> .room3d) {
   outline-offset: 2px;
 }
 
-/* 窄屏:入口条贴紧自己的底边,少挡点场景 */
+/* 窄屏:入口按钮缩一点 */
 @media (max-width: 720px) {
-  .entry-bar {
-    margin-bottom: 0.7rem;
-    font-size: 0.72rem;
-  }
-
   .entry {
     padding: 0.38rem 0.72rem;
   }
