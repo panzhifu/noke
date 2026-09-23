@@ -1,38 +1,52 @@
 mod content;
 mod hooks;
-mod sections;
+mod panel;
+mod room;
 mod theme;
 
+use content::{COLOPHON, SITE};
 use leptos::mount::mount_to_body;
 use leptos::prelude::*;
-use sections::{About, Contact, Footer, Header, Hero, Notes, Projects, Room};
+use panel::{Panel, Spot};
+use room::Room;
+use theme::next_theme;
 
 #[component]
 pub fn App() -> impl IntoView {
     let set_theme = theme::use_theme();
-    let active = hooks::use_scroll_spy(content::NAV);
-    let progress = hooks::use_scroll_progress();
+    let (spot, set_spot) = signal::<Option<Spot>>(None);
+    hooks::on_escape(set_spot);
 
     view! {
-        <div
-            class="scroll-progress"
-            aria-hidden="true"
-            style=move || format!("transform: scaleX({:.3})", progress.get())
-        >
+        // 名字与标语交给场景里的桌前铭牌;这一行只给读屏和搜索引擎。
+        <h1 class="sr-only">{ format!("{} —— {} · {}", SITE.name, SITE.role, SITE.tagline) }</h1>
+
+        <div class="topbar">
+            <span class="topbar-hint">{ "点家具看看" }</span>
+            <button
+                type="button"
+                class="icon-btn"
+                aria-label="切换深浅色主题"
+                title="切换深浅色主题"
+                on:click=move |_| set_theme.update(|current| *current = next_theme(*current))
+            >
+                <svg class="icon icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+                    <path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"
+                          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                </svg>
+                <svg class="icon icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path d="M20 14.6A8.6 8.6 0 0 1 9.4 4a8.6 8.6 0 1 0 10.6 10.6z"
+                          fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
+                </svg>
+            </button>
         </div>
 
-        <Header set_theme=set_theme active=active />
+        <Room set_spot=set_spot picked=spot />
 
-        <main>
-            <Hero />
-            <About />
-            <Room />
-            <Projects />
-            <Notes />
-            <Contact />
-        </main>
+        <Panel spot=spot set_spot=set_spot />
 
-        <Footer />
+        <p class="colophon">{ format!("{COLOPHON} · 自 {} 起", SITE.since) }</p>
     }
 }
 
@@ -51,6 +65,5 @@ fn main() {
     console_error_panic_hook::set_once();
     mount_to_body(App);
     remove_boot_screen();
-    hooks::init_reveal();
     hooks::init_room_tilt();
 }

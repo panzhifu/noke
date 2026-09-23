@@ -1,40 +1,6 @@
 //! 全站唯一的文案入口 —— 想换成自己的内容,只改这个文件即可。
 //! 标了 `TODO` 的地方是我替你留的占位,其余字段可以随意增删。
 
-pub struct NavItem {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub index: &'static str,
-}
-
-pub const NAV: &[NavItem] = &[
-    NavItem {
-        id: "about",
-        label: "关于",
-        index: "01",
-    },
-    NavItem {
-        id: "room",
-        label: "房间",
-        index: "02",
-    },
-    NavItem {
-        id: "projects",
-        label: "作品",
-        index: "03",
-    },
-    NavItem {
-        id: "notes",
-        label: "手记",
-        index: "04",
-    },
-    NavItem {
-        id: "contact",
-        label: "联系",
-        index: "05",
-    },
-];
-
 pub struct Site {
     pub name: &'static str,
     pub role: &'static str,
@@ -79,11 +45,18 @@ pub const SOCIALS: &[Social] = &[
     // Social { label: "X", url: "https://x.com/yourhandle", hint: "碎碎念" },
 ];
 
+/// 屏幕上那个界面示意对应哪个软件、链向哪。
+pub struct Screen {
+    pub app: &'static str,
+}
+
+pub const SCREEN: Screen = Screen { app: "Trove" };
+
 pub const ABOUT: &[&str] = &[
     "我是 noke,用 Rust 写软件。大多数时候在写桌面应用 —— 那些打开就能用、不联网也能用、\
      数据留在自己机器上的工具。",
     "喜欢在细节上花时间:一个视图为什么这么排,一次滚动为什么这么顺。也在玩 Leptos + \
-     WebAssembly,这个网站本身就是那条路线的产物。",
+     WebAssembly,这个站点本身就是那条路线的产物 —— 一间用 CSS 搭的房间,没有 WebGL,没有三方库。",
 ];
 
 pub struct Highlight {
@@ -91,7 +64,7 @@ pub struct Highlight {
     pub detail: &'static str,
 }
 
-/// 「现在」区块:三段短句,说明此刻在做什么。
+/// 「现在」:三段短句,说明此刻在做什么。
 pub const NOW: &[Highlight] = &[
     Highlight {
         label: "在造",
@@ -104,7 +77,7 @@ pub const NOW: &[Highlight] = &[
     // TODO: 换成你真正的「在读 / 在想」
     Highlight {
         label: "在想",
-        detail: "怎样让个人网站保持轻:一个页面,没有追踪,没有后端。",
+        detail: "怎样让个人网站保持轻:一间房间,没有追踪,没有后端。",
     },
 ];
 
@@ -117,29 +90,12 @@ pub const STACK: &[&str] = &[
     "TypeScript",
 ];
 
-/// 房间场景里墙上那几张海报的字面标记 —— 是我排的三个占位版式。
-/// 换成真海报:把文件放进 `assets/`,再把 room.rs 里的 `.poster` 换成 `<img src="assets/xxx.png">`。
-pub const POSTER_MARKS: &[&str] = &["n", "o", "k"];
-
-pub struct Screen {
-    pub app: &'static str,
-    pub url: &'static str,
-    pub caption: &'static str,
-}
-
-/// 书桌上那块屏幕:界面上的软件与它链向哪。
-pub const SCREEN: Screen = Screen {
-    app: "Trove",
-    url: "https://github.com/panzhifu/trove",
-    caption: "屏幕上跑的是 Trove 的界面示意:左栏集合,右边素材网格。点它去仓库。",
-};
-
 pub struct Project {
     pub name: &'static str,
     pub summary: &'static str,
-    /// 第二段。留空则整段不渲染 —— 卡片之间的高度差一部分就是这么来的。
+    /// 第二段,可留空。
     pub note: &'static str,
-    /// 要点列表。留空则整块不渲染。
+    /// 要点列表,可留空。
     pub points: &'static [&'static str],
     pub tags: &'static [&'static str],
     /// 取自仓库 createdAt 的年月。
@@ -197,7 +153,7 @@ pub const PROJECTS: &[Project] = &[
     Project {
         name: "trove-website",
         summary: "Trove 的官网。",
-        note: "同一个技术栈的另一次练习:Leptos CSR 编译到 Wasm 再托管到 GitHub Pages —— 和这个站点共用一套做法。",
+        note: "同一个技术栈的另一次练习:Leptos CSR 编译到 Wasm 再托管到 GitHub Pages。",
         points: &[],
         tags: &["Rust", "Leptos", "Web"],
         period: "2026-09",
@@ -214,7 +170,7 @@ pub const PROJECTS: &[Project] = &[
         url: "https://github.com/panzhifu/echo",
         featured: false,
     },
-    // TODO: 新项目照抄上面一块即可;标签会自动进筛选条,note / points 留空就不占位置。
+    // TODO: 新项目照抄上面一块即可。
 ];
 
 pub struct Note {
@@ -224,15 +180,24 @@ pub struct Note {
     pub url: &'static str,
 }
 
-pub const NOTES: &[Note] = &[
-    Note {
-        title: "Hello World",
-        date: "2025-05-14",
-        summary: "博客的第一篇,也是最难的那一篇。",
-        url: "https://panzhifu.github.io/2025/05/14/hello-world/",
-    },
-    // TODO: 新文章加在这里;留空也没关系,这个区块会自动隐藏提示。
-];
+pub const NOTES: &[Note] = &[Note {
+    title: "Hello World",
+    date: "2025-05-14",
+    summary: "博客的第一篇,也是最难的那一篇。",
+    url: "https://panzhifu.github.io/2025/05/14/hello-world/",
+}];
 
-pub const FOOTER_NOTE: &str =
-    "本站由 Leptos 编译成 WebAssembly,托管在 GitHub Pages。无 Cookie、无追踪、无后端。";
+/// 墙上的海报位:这几张是我排的字面占版式。
+/// 换成真海报:把文件放进 `assets/`,再把 room.rs 里的 `.poster` 换成 `<img src="assets/xxx.png">`。
+pub const POSTER_MARKS: &[&str] = &["n", "k"];
+
+pub const POSTER_CAPTION: &str =
+    "墙上这三张是占位版式。把你设计的海报放进 assets/ 换上就行 —— 右边那张虚线框就是留给你的位置。";
+
+/// 房间里的海报、屏幕缩略图、面板里的迷你海报共用一套色相:
+/// 黄金角散列让相邻两块不撞色,起点 26° 对齐本站强调色。
+pub fn hue_at(index: usize) -> u16 {
+    ((26.0 + index as f32 * 137.508) % 360.0).round() as u16
+}
+
+pub const COLOPHON: &str = "本站是一间用 CSS 搭的房间 · Leptos 编译成 WebAssembly · GitHub Pages · 无 Cookie、无追踪、无后端";

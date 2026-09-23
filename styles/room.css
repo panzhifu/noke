@@ -4,23 +4,19 @@
    所有尺寸用 em,改 .room 的 font-size 就整体缩放一个数。
    ============================================================ */
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
+/* 舞台里全部尺寸都是 em,所以这一行 font-size 就是整个场景的缩放旋钮:
+   宽、高哪个方向紧张就压哪个,保证房间永远完整落在视口里。 */
 .room {
-  /* 单一缩放旋钮:舞台内所有尺寸都是它的 em */
-  font-size: clamp(6.6px, 0.55vw + 4.6px, 12px);
+  position: relative;
+  z-index: 1;
+  font-size: max(5.4px, min(12px, 1.35vw, 2.35vh));
   display: grid;
   place-items: center;
+  align-self: center;
+  justify-self: center;
   perspective: 125em;
-  perspective-origin: 50% 38%;
-  padding: 1em 0 0;
+  perspective-origin: 50% 36%;
+  padding: 1.2em 0 0;
 }
 
 .room-stage {
@@ -238,9 +234,6 @@
   --w: 17.5em;
   --h: 10.6em;
   --dy: -9.7em;
-  display: block;
-  text-decoration: none;
-  transform-style: preserve-3d;
 }
 
 .bezel {
@@ -388,9 +381,12 @@
 
 .poster {
   position: relative;
+  padding: 1.1em;
+  font: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
   width: 11.5em;
   height: 15.5em;
-  padding: 1.1em;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -437,13 +433,6 @@
   font-size: 1.15em;
   letter-spacing: 0.12em;
   color: color-mix(in oklab, var(--fg) 42%, transparent);
-}
-
-.room-caption {
-  font-size: 12.5px;
-  color: var(--muted);
-  text-align: center;
-  margin: 20px 0 0;
 }
 
 /* ---------- 场景用的颜色(接主样式的两套主题) ---------- */
@@ -494,4 +483,135 @@ html[data-theme="light"] .room-stage {
     width: 9.4em;
     height: 12.6em;
   }
+}
+
+/* ---------- 可点的家具 ---------- */
+
+.hotspot {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 悬浮 / 聚焦 / 已选中:给面加一圈强调色内描边。
+   不用 filter 或 transform —— 那两类属性会压平 3D 上下文,盒子会塌。 */
+.hotspot:hover .face,
+.hotspot:focus-visible .face,
+.hotspot.is-picked .face {
+  box-shadow: inset 0 0 0 0.22em color-mix(in oklab, hsl(var(--hue, 26) 62% 55% / 0.9), transparent);
+}
+
+.hotspot:hover .bezel,
+.hotspot:focus-visible .bezel,
+.hotspot.is-picked .bezel {
+  box-shadow: 0 0 0 0.24em color-mix(in oklab, hsl(var(--hue, 26) 62% 55% / 0.85), transparent);
+}
+
+.poster.is-picked {
+  border-color: hsl(var(--hue, 26) 62% 56%);
+}
+
+/* 物件上方的小标签:只在悬浮 / 聚焦 / 选中时露出来 */
+.tag {
+  position: absolute;
+  left: 50%;
+  top: -0.4em;
+  transform: translate(-50%, -100%);
+  padding: 0.28em 0.8em;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  font-family: var(--font-mono);
+  font-size: 1.45em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: var(--fg);
+  opacity: 0;
+  transition: opacity 0.18s, transform 0.18s var(--ease);
+  pointer-events: none;
+}
+
+.hotspot:hover .tag,
+.hotspot:focus-visible .tag,
+.hotspot.is-picked .tag {
+  opacity: 1;
+  transform: translate(-50%, -115%);
+}
+
+/* ---------- 桌前铭牌与墙上的标语 ---------- */
+
+.plate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) translateZ(0.6em);
+  font-family: var(--font-mono);
+  font-size: 1.5em;
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  color: color-mix(in oklab, var(--accent) 78%, #fff);
+  opacity: 0.85;
+}
+
+.sign {
+  position: absolute;
+  left: 48.5em;
+  top: 4.6em;
+  width: 17em;
+  padding: 0.9em 1.1em;
+  border: 0.22em solid color-mix(in oklab, var(--bg-elev) 86%, #fff);
+  border-radius: 0.15em;
+  background: color-mix(in oklab, var(--bg-elev) 82%, #fff);
+  box-shadow: 0.4em 0.6em 1.2em -0.6em rgb(0 0 0 / 0.5);
+  transform: translateZ(0.35em);
+  font-size: 1.62em;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: color-mix(in oklab, var(--fg) 76%, transparent);
+}
+
+/* ---------- 面板里的迷你海报 ---------- */
+
+.mini-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.mini-poster {
+  width: 62px;
+  height: 84px;
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 2px solid color-mix(in oklab, var(--bg-elev) 86%, #fff);
+  border-radius: 3px;
+  background:
+    linear-gradient(
+      158deg,
+      hsl(var(--hue, 26) 58% 54% / 0.5),
+      hsl(var(--hue, 26) 48% 42% / 0.16) 62%,
+      transparent
+    ),
+    color-mix(in oklab, var(--bg-elev) 84%, #fff);
+}
+
+.mini-mark {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  color: color-mix(in oklab, var(--fg) 82%, transparent);
+}
+
+.mini-baseline {
+  height: 4px;
+  width: 60%;
+  background: color-mix(in oklab, var(--fg) 32%, transparent);
 }
