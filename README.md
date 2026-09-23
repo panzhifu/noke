@@ -1,10 +1,23 @@
 # noke · 个人网站
 
 一整间房间就是站点的全部界面:没有滚动、没有导航条,家具可以点,点开的东西从下方浮起。
-Rust + [Leptos](https://leptos.dev)(CSR,编译成 WebAssembly)+ Trunk 构建,托管在 GitHub Pages。
-纯静态:没有后端、没有 Cookie、没有第三方追踪,也没用 WebGL —— 房间的立体感是 CSS 3D 变换做的。
+
+Rust + [Leptos](https://leptos.dev)(CSR,编译成 WebAssembly)负责界面与状态,
+房间由 [Three.js](https://threejs.org) 渲染,家具模型在 Blender 里做、导出成 glb。
+Trunk 构建,托管在 GitHub Pages。纯静态:没有后端、没有 Cookie、没有第三方追踪;
+Three.js 随仓库一起发布,运行时不从 CDN 拉任何东西。
 
 线上地址:https://panzhifu.github.io/noke/
+
+## 当前状态:房间刚铺好地毯
+
+| 已经进 3D | 还在等 |
+| --- | --- |
+| 地毯 —— `assets/models/carpet.glb`(源自 `~/blender/地毯.blend`) | 床、书桌、显示器、抽屉柜、杯子、海报 |
+
+所以入口暂时摆在页面底部那一排按钮里(`src/lib.rs` 的 `EntryBar`),点开的还是原来那五格面板。
+**每搬进来一件家具**:在 `src/models.rs` 给它写上 `spot`,再把 `EntryBar` 里对应那个按钮删掉。
+按钮删完,这个组件就能整个移除,房间重新变回唯一界面。
 
 ## 本地开发
 
@@ -18,33 +31,100 @@ trunk serve                        # http://127.0.0.1:8080,改代码自动重编
 trunk build --release              # 产物在 dist/
 ```
 
-## 家具 = 入口
+## 加一个模型
 
-| 点什么 | 浮出什么 | 数据在哪 |
-| --- | --- | --- |
-| 显示器(屏里是 Trove 的界面示意) | 作品 | `PROJECTS` |
-| 床 | 关于 + 现在 + 常用 | `ABOUT` `NOW` `STACK` |
-| 抽屉柜 | 手记 | `NOTES` |
-| 杯子 | 联系(复制邮箱 / socials) | `SITE.email` `SOCIALS` |
-| 墙上的海报与那个虚线空位 | 海报 | `POSTER_MARKS` `POSTER_CAPTION` |
+四步:
 
-映射写在 `src/room.rs`(每个家具是一个 `<button class="hotspot">`,带 `aria-label` 与悬浮标签),
-面板是 `src/panel.rs` —— 五格内容常驻 DOM,靠 `.pane-off` 显隐,切换时不重建。
-名字与标语不用页头:铭牌刻在桌前(`.plate`),标语挂在墙上(`.sign`),
-`<h1>` 用 `.sr-only` 只留给读屏和搜索引擎。
+1. **Blender 里做**,导出 glb(贴图会被一并嵌进去)。
+   导出前删掉灯光 —— 网页自己打光;粒子系统也去掉,glTF 不支持、导出器会报错。
+   `target/tmp/export_glb.py` 里就是这套导出脚本,改个路径可以直接复用。
+2. **丢进 `assets/models/`**,文件名随意,清单里指到就行。
+3. **在 `src/models.rs` 的 `MODELS` 里加一条**:路径、位置、旋转、缩放,以及可选的 `spot`。
+4. 如果它有 `spot`,把 `src/lib.rs` 里 `EntryBar` 的对应按钮删掉。
+
+### 坐标系以 Blender 为准
+
+导出时 Blender 已经把 Z-up 转成 glTF 的 Y-up,所以**模型在 Blender 里摆在哪、清单里照抄就行**,
+不用做单位换算。地毯平铺在 XZ 平面、y = 0。
+
+`position` / `rotation` / `scale` 对应 three.js 的 `Object3D`;`rotation` 写**角度**,JS 那边负责转弧度。
+
+`spot` 的取值要和 `panel::Spot` 对得上:`"work"` `"about"` `"notes"` `"contact"` `"poster:0"`。
+写 `None` 就是纯装饰、点不开。
+
+### 尺度不用手调
+
+相机距离、阴影范围、地板大小都是**按场景实际的包围盒算的**(`fitRig` / `fitCamera`),
+所以把地毯换尺寸、或者往房间里添别的东西,构图会自动跟上。
 
 ## 想改内容,只动一个文件
 
-全部文案都在 [`src/content.rs`](src/content.rs)。标了 `TODO` 的地方是我留的占位。
+全部文案都在 [`src/content.rs`](src/content.rs)。标了 `TODO` 的地方是留的占位。
 
 - 配色 / 字号:`styles/main.css` 顶部两个 `[data-theme]` 块。
-- 房间的几何:`styles/room.css` 里每件家具用 `--x`(左右)、`--z`(进深)、`--w/--h/--d`(长宽高)描述,
-  单位全是 em;`.room` 的 `font-size` 就是整个场景的缩放旋钮(它同时受视口宽和高的约束)。
-  相机基准角度在 `.room-stage` 的 `transform`;鼠标视差由 `src/hooks.rs` 写成 `--rx/--ry`,
-  旋转本身交给 CSS 在 `prefers-reduced-motion: no-preference` 下消费 —— 关掉动效时视差自然失效。
-- 换真海报:文件丢进 `assets/`,把 `src/room.rs` 里的 `.poster` 换成 `<img src="assets/xxx.png">`。
-- 加一件能点的家具:在 `room.rs` 加一个 `<button class="prop ... hotspot">` + `Spot` 变体,
-  再到 `panel.rs` 加一格 `.pane`。
+  3D 层跟着这两个主题走 —— `assets/room3d.js` 顶部的 `palette()` 读 `data-theme`,
+  得出背景 / 地板 / 三盏灯的颜色,切主题时不用改它。
+- 面板:五格内容常驻 DOM,靠 `.pane-off` 显隐,切换时不重建(`src/panel.rs`)。
+- 入口按钮:`src/lib.rs` 的 `EntryBar`(临时的,见上)。
+
+## Three.js 放在哪
+
+全部在 `assets/vendor/`,随仓库发布、不走 CDN:
+
+| 文件 | 大小 | 说明 |
+| --- | --- | --- |
+| `three.module.min.js` | 393 KB | r186 的渲染器部分 |
+| `three.core.js` | 416 KB | r186 把核心拆了出来,module.min 里写死 `import "./three.core.js"` —— **这个文件名不能改** |
+| `addons/loaders/GLTFLoader.js` | 118 KB | 加载 glb |
+| `addons/utils/BufferGeometryUtils.js`、`SkeletonUtils.js` | 49 KB | 上面那个的依赖 |
+
+`index.html` 用 importmap 把裸名 `three` 指过去:
+
+```html
+<script type="importmap">
+  { "imports": {
+      "three": "./assets/vendor/three.module.min.js",
+      "three/addons/": "./assets/vendor/addons/"
+  } }
+</script>
+```
+
+**importmap 必须排在任何 module 脚本之前**,否则浏览器会直接把它忽略掉。
+Trunk 会把 wasm 的加载脚本注入到 `<link data-trunk="rust">` 那一行的位置,
+所以 importmap 写在了它上面 —— 别挪。
+
+升级 Three.js:按上表四个名字重新下载,把 `three.core.min.js` 存成 `three.core.js` 就行。
+
+## 目录
+
+```
+src/
+  lib.rs        页面骨架 + 入口条 + 挂载
+  models.rs     3D 模型清单 ← 加模型改这里
+  room3d.rs     把清单挂到 DOM,把 3D 的拾取事件接回信号
+  room.rs       CSS 3D 那版房间(已停用,见下)
+  panel.rs      五格面板
+  content.rs    全部文案
+  hooks.rs      Esc / 复制邮箱 / 3D 拾取事件
+assets/
+  room3d.js     Three.js 渲染层:场景、相机、光照、视差、拾取
+  models/       glb
+  vendor/       Three.js
+styles/
+  main.css      主题、顶栏、面板、页脚
+  room3d.css    3D 层与入口条
+  room.css      CSS 房间的样式(已停用)
+```
+
+### CSS 3D 那版还留着
+
+`src/room.rs` + `styles/room.css` 没删,只是 `lib.rs` 里不再 `mod room;`。
+要切回去:
+
+1. `<Room3D set_spot=set_spot />` 换回 `<Room set_spot=set_spot picked=spot />`;
+2. 恢复 `mod room;` 和 `use room::Room;`;
+3. 把 `hooks::init_room_tilt()` 加回 `main()`;
+4. `content.rs` 与 `hooks.rs` 里那两处 `#[allow(dead_code)]` 可以一并去掉。
 
 ## 部署到 GitHub Pages
 
@@ -67,25 +147,43 @@ trunk build --release              # 产物在 dist/
 | `<用户名>.github.io` | `https://<用户名>.github.io/` | `/` |
 | 其他(如 `noke`) | `https://<用户名>.github.io/noke/` | `/noke/` |
 
-本地想按线上子路径预览:
+本地想按线上子路径预览(**必须带 `--public-url`,否则 Trunk 生成的路径是根路径的,子目录下会 404**):
 
 ```bash
 trunk build --release --public-url /noke/
-rm -rf /tmp/noke-preview && mkdir -p /tmp/noke-preview && cp -r dist /tmp/noke-preview/noke
-python3 -m http.server -d /tmp/noke-preview 8000   # 打开 http://localhost:8000/noke/
+rm -rf target/tmp/preview && mkdir -p target/tmp/preview && cp -r dist target/tmp/preview/noke
+python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:8000/noke/
 ```
 
 ## 已验证
 
-`cargo clippy` / `cargo fmt --check` 零警告。用真实产物在浏览器里逐项跑过:
-七个 hotspot 各自的 `aria-label` 与标签、点开后恰好只有一格可见且与标题一致、Esc 与关闭按钮都能收起、
-六个作品行(含 Trove 的「主线」徽标与要点)、关于格的段落/现在/常用、手记一行、
-联系格的复制邮箱与 socials、海报格的迷你海报;房间侧 `#room-stage` 是真 3D(`matrix3d` + `perspective`),
-视差钳在 ±7°/±3.5° 且离开归零;主题切换写入 `localStorage`。
-面板内滚与行高在给定 640px 宽度下量过(作品行 152/127/100…,按钮 86×42,徽标 31×18)。
+`cargo clippy` / `cargo fmt --check` 零警告。
 
-修掉的两个真问题:`.pane-off` 类当时没有对应 CSS,五格面板会叠在一起(面板内容高 8215px);
-缩放写成 `min(12px, 1.35vw, max(...))` 会让下限被 min 吃掉,已改成 `max(5.4px, min(...))`。
+## 已验证
 
-未做的:内置浏览器面板是 0×0 隐藏表面拿不到截图,所以**视觉观感 —— 尤其真实视口下房间的光影层次
-和面板的开合手感 —— 没有用眼睛确认过**,上面都是结构与计算样式层面的测量。
+`cargo clippy --all-targets` 零告警,`cargo fmt --check` 通过。
+
+构建管线:`trunk build --release --public-url /noke/` 之后 `dist/assets/` 下 glb、Three.js、
+`room3d.js` 都在位;`index.html` 里 importmap 排在 Trunk 注入的 wasm 加载脚本之前。
+
+**用 Edge(Chromium 151) 真机跑过** —— SwiftShader 软件渲染,视口 1440×900:
+
+- `#room3d` 拿到清单,`carpet.glb` 加载成功,canvas 落地 1440×900,WebGL 2.0 上下文正常
+- 地毯的编织贴图、透视、光照、地板对比都正常
+- 无 JS 报错
+- WebGL 拿不到时整层跳过并派发 `noke:room-ready`,页面不白屏 ——
+  这条在 Firefox 无头下实测过(它 `webgl`/`webgl2` 都是 no),DOM 入口照常可用
+
+首屏 gzip 约 316 KB(Three.js 占 195 KB);地毯 glb 557 KB,里面已经是 JPEG 所以 gzip 压不动。
+
+### 踩过的坑
+
+- **importmap 的位置**:Trunk 把 wasm 加载脚本注入到 `<link data-trunk="rust">` 那一行的位置,
+  而 importmap 只要晚于任何 module 脚本出现就会被浏览器忽略,`import 'three'` 会全部解析失败。
+  所以 importmap 写在了那行上面 —— 别往下挪。
+- **three r186 拆包**:`three.module.min.js` 里写死 `import "./three.core.js"`,
+  所以下载 `three.core.min.js` 后要**存成 `three.core.js`**,文件名不能改。
+- **`PCFSoftShadowMap` 在 r186 被移除**,改用 `PCFShadowMap`(否则每次启动都有一条 warning)。
+- **`--public-url` 必须带**:不带的话 Trunk 生成的是根路径资源,子目录部署直接 404。
+- **body 的三行 grid**:`.room3d` 是 `fixed` 的、不占 grid 行,页脚会顺着往上跑一格。
+  现在 `body:has(> .room3d)` 把它改成四行(顶栏 / 入口条 / 场景 / 页脚)。
