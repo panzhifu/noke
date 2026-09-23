@@ -22,7 +22,7 @@ pub struct Model {
     pub spot: Option<&'static str>,
 }
 
-/// 目前有地毯、电动车、书桌、床和一台唱机。
+/// 目前有地毯、电动车、书桌、床、唱机和一台冰箱。
 /// 往后的家具按 Blender 里的坐标直接加在后面就行。
 pub const MODELS: &[Model] = &[
     Model {
@@ -58,6 +58,16 @@ pub const MODELS: &[Model] = &[
         rotation: (0.0, 0.0, 0.0),
         scale: 1.0,
         spot: Some("about"),
+    },
+    Model {
+        name: "fridge",
+        file: "assets/models/fridge.glb",
+        // 0.78 宽 × 1.34 深 × 1.14 高(那 1.34 是门开着伸出来的深度),脚底已贴 z=0。
+        // 放在右侧空地;若开门方向冲着墙,把 rotation 的 y 改成 180 或 ±90。
+        position: (1.65, 0.0, 0.25),
+        rotation: (0.0, 0.0, 0.0),
+        scale: 1.0,
+        spot: None,
     },
     Model {
         name: "turntable",

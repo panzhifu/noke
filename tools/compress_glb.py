@@ -25,8 +25,12 @@ ARGS = sys.argv[sys.argv.index("--") + 1:]
 SRC, DST = ARGS[0], ARGS[1]
 TARGET_TRIS = int(ARGS[2])
 TEX_CAP = int(ARGS[3])
-# keep:只降面 + 压贴图,不动方向/单位/原点 —— 给已经在清单里摆好的模型用
-KEEP = ARGS[4] == "keep" if len(ARGS) > 4 else False
+MODE = ARGS[4] if len(ARGS) > 4 else ""
+# 第 5 个参数是模式:
+#   keep    只降面 + 压贴图,方向/单位/原点一律不碰 —— 给已经在清单里摆好的模型用
+#   no-up   跳过"最薄的一面就是顶"的自动站直 —— 冰箱这类"高度是最长边"的家具会被那条规则放倒
+KEEP = MODE == "keep"
+SKIP_UPFIX = MODE in ("keep", "no-up")
 
 
 def purge():
@@ -96,7 +100,7 @@ dims, _, _ = dims_of(mesh)
 raw_dims = list(dims)
 
 # ---- 站直:Blender 的 up 是 Z,最薄的那一维应当在 Z 上 ----
-up_fix = (not KEEP) and dims.index(min(dims)) != 2
+up_fix = (not SKIP_UPFIX) and dims.index(min(dims)) != 2
 if up_fix:
     # FBX 导进来的对象常常是 QUATERNION 旋转模式,直接写 rotation_euler 不生效
     mesh.rotation_mode = "XYZ"
