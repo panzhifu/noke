@@ -1,6 +1,6 @@
 //! 3D 房间：Three.js 渲染的那一层。
 //!
-//! 渲染本身全在 `assets/room3d.js` 里。这里只做两件事 ——
+//! 渲染本身全在 `assets/room/` 里(main.js 编排,其余按职责分文件)。这里只做两件事 ——
 //! 把模型清单(见 manifest.rs)挂到 DOM 上给它读，以及把它的拾取结果接回 Leptos 的信号。
 //!
 //! CSS 3D 那版（`room.rs` + `room.css`）先留着没删：回退时把 `lib.rs` 里的

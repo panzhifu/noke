@@ -71,7 +71,7 @@ trunk build --release              # 产物在 dist/
 全部文案都在 [`src/content.rs`](src/content.rs)。标了 `TODO` 的地方是留的占位。
 
 - 配色 / 字号:`styles/main.css` 顶部两个 `[data-theme]` 块。
-  3D 层跟着这两个主题走 —— `assets/room3d.js` 顶部的 `palette()` 读 `data-theme`,
+  3D 层跟着这两个主题走 —— `assets/room/palette.js` 读 `data-theme`,
   得出背景 / 地板 / 四盏灯的颜色,切主题时不用改它。
 - 面板:五格内容常驻 DOM,靠 `.pane-off` 显隐,切换时不重建(`src/ui/panel.rs`)。
 - **页面上没有可见文字**:名字和标语在 `h1.sr-only` 与 meta 里;入口条(`src/ui/entries.rs`)
@@ -121,7 +121,10 @@ src/
   content.rs    全部文案
   hooks.rs      Esc / 复制邮箱 / 3D 拾取事件
 assets/
-  room3d.js     Three.js 渲染层:场景、相机、光照、视差、拾取
+  room/         Three.js 渲染层,按职责分文件:
+                config(常量) / palette(色板) / manifest(清单) / scene(灯光与墙地) /
+                framing(取景) / models(glb) / controls(旋转钳位) / loop(按需渲染) /
+                main(编排、事件、拾取、启动)
   models/       glb
   vendor/       Three.js
 styles/
@@ -179,7 +182,7 @@ python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:80
 `cargo clippy --all-targets` 零告警,`cargo fmt --check` 通过。
 
 构建管线:`trunk build --release --public-url /noke/` 之后 `dist/assets/` 下 glb、Three.js、
-`room3d.js` 都在位;`index.html` 里 importmap 排在 Trunk 注入的 wasm 加载脚本之前。
+`assets/room/*.js` 都在位;`index.html` 里 importmap 排在 Trunk 注入的 wasm 加载脚本之前。
 
 **用 Edge(Chromium 151) 真机跑过** —— SwiftShader 软件渲染,视口 1440×900:
 

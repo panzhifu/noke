@@ -15,7 +15,7 @@
     three.js 走 importmap,而且必须排在所有 module 脚本之前 ——
     Trunk 会把 wasm 的加载脚本注入到下面 <link data-trunk="rust"> 所在的位置,
     而 importmap 一旦晚于任何 module 脚本出现,浏览器就直接忽略它,
-    那样 room3d.js 里的 import 'three' 会全部解析失败。
+    那样 assets/room/main.js 里的 import 'three' 会全部解析失败。
     路径写成相对的:换仓库名或部署到子路径都不用动。
   -->
   <script type="importmap">
@@ -60,6 +60,6 @@
   </noscript>
 
   <!-- 3D 房间。脚本会自己等 Leptos 把 #room3d 渲染出来(两侧都留了招呼)。 -->
-  <script type="module" src="./assets/room3d.js"></script>
+  <script type="module" src="./assets/room/main.js"></script>
 </body>
 </html>
