@@ -13,41 +13,32 @@
  * 空间感靠这几件事凑出来，没有一样需要后处理 pass：
  * 两面墙把角落封住、雾让地面远处化进背景、一盏反向补光压住死黑、
  * 暗角与颗粒在 hud.css 里用 CSS 叠一层、hover 有 emissive 高亮 + monospace 标签。
+ *
+ * 旋转交给 OrbitControls（同类开源房间站都是这么做的），角度钳位：
+ * 墙是单面片，转到墙背后会直接看穿，所以方位角/俯角不许越界。
  */
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const ROOT_ID = 'room3d';
 const MAX_DPR = 2;
 const PARALLAX_YAW = 0.07;
 const PARALLAX_PITCH = 0.035;
-const EASE = 0.06;
-const ORBIT_EASE = 0.09;
-// 拖拽能转的范围：超过这个角度墙面就露背了，所以钳住
-const ORBIT_YAW_LIMIT = 0.42;
-const ORBIT_PITCH_LIMIT = 0.1;
-const DRAG_YAW_PER_PX = 0.0024;
-const DRAG_PITCH_PER_PX = 0.0016;
-// 按这个像素数区分「点一下」和「拖了一下」
+const PARALLAX_EASE = 0.06;
+const TARGET_EASE = 0.07;
+// 贴图各向异性上限:斜着看地面时,让贴图不发糊靠的是它,不是分辨率
+const ANISOTROPY = 8;
+// 拖过这几个像素就不算「点一下」,否则每次转完视角都会误开面板
 const DRAG_THRESHOLD = 6;
-const FOCUS_DISTANCE = 0.82;
+// 镜头钳位(度):俯角不到 25° 会看到地板背面;方位角限制在两面墙的正面一侧
+const POLAR_LIMITS = [25, 72];
+const AZIMUTH_LIMITS = [-20, 66];
+const DISTANCE_RANGE = [0.6, 1.35]; // × 取景距离
 // hover 时往材质里加的一点自发光(琥珀色),浅背景上够显眼又不刺眼
 const HOVER_EMISSIVE = 0x3a2a10;
-
-// 标签文字的唯一来源是 panel.rs 的 spot_label;这里只做 spot 字符串 → 中文的映射
-const SPOT_LABELS = {
-  work: '作品',
-  about: '关于',
-  notes: '手记',
-  contact: '联系',
-};
-
-function spotLabel(spot) {
-  if (!spot) return '';
-  if (spot.startsWith('poster:')) return `海报 ${spot.slice(7)}`;
-  return SPOT_LABELS[spot] || spot;
-}
+const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'];
 
 /** 跟着站点的 data-theme 走，免得 3D 层和 DOM 层风格打架。 */
 function palette() {
@@ -69,6 +60,20 @@ function palette() {
   };
 }
 
+// 标签文字的唯一来源是 panel.rs 的 spot_label;这里只做 spot 字符串 → 中文的映射
+const SPOT_LABELS = {
+  work: '作品',
+  about: '关于',
+  notes: '手记',
+  contact: '联系',
+};
+
+function spotLabel(spot) {
+  if (!spot) return '';
+  if (spot.startsWith('poster:')) return `海报 ${spot.slice(7)}`;
+  return SPOT_LABELS[spot] || spot;
+}
+
 function readManifest(host) {
   const raw = host.dataset.models;
   if (!raw) return [];
@@ -86,6 +91,8 @@ function resolveUrl(file) {
   return new URL(file, document.baseURI).href;
 }
 
+const deg = (value) => THREE.MathUtils.degToRad(value);
+
 function createScene(colors) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(colors.background);
@@ -102,6 +109,7 @@ function createScene(colors) {
   key.shadow.normalBias = 0.02;
   scene.add(key);
 
+  // 补光从主光的对角来,不投影
   const fill = new THREE.DirectionalLight(colors.fill, colors.fillIntensity);
   scene.add(fill);
 
@@ -157,7 +165,6 @@ function fitRig(scene, key, fill, rig) {
   scene.add(target);
   key.target = target;
   key.position.set(center.x + span * 0.5, span * 1.1, center.z + span * 0.7);
-  // 补光从主光的对角来,不投影
   fill.position.set(center.x - span * 0.8, span * 0.7, center.z - span * 0.6);
   fill.target = target;
 
@@ -176,7 +183,7 @@ function createFloor(colors, span, center) {
 }
 
 /** 俯角固定,距离按场景包围盒算 —— 换地毯尺寸或往后添家具,构图都自己跟上。 */
-const CAMERA_PITCH = THREE.MathUtils.degToRad(50);
+const CAMERA_PITCH = deg(50);
 const CAMERA_FILL = 1.05;
 
 function fitCamera(camera, host, center, size) {
@@ -193,17 +200,10 @@ function fitCamera(camera, host, center, size) {
   // 只按中心算距离,近边会溢出画面(角点离相机更近,张角反而更大)。
   const nearShift = halfDepth * cosPitch;
   const distForWidth = halfWidth / Math.tan(hFov / 2) + nearShift;
-  const distForDepth =
-    (halfDepth * sinPitch + halfHeight) / Math.tan(vFov / 2) + nearShift;
+  const distForDepth = (halfDepth * sinPitch + halfHeight) / Math.tan(vFov / 2) + nearShift;
   const distance = Math.max(distForWidth, distForDepth, 1) * CAMERA_FILL;
 
   camera.aspect = aspect;
-  const position = new THREE.Vector3(
-    center.x,
-    center.y + distance * sinPitch,
-    center.z + distance * cosPitch,
-  );
-  camera.lookAt(center.x, center.y, center.z);
   camera.near = Math.max(distance * 0.02, 0.1);
   camera.far = distance * 12;
   camera.updateProjectionMatrix();
@@ -211,10 +211,10 @@ function fitCamera(camera, host, center, size) {
   // 雾按这段距离给:近处在画面里几乎看不见衰减,远处地面和墙根化进背景
   const fogNear = Math.max(distance * 0.72, 1);
   const fogFar = Math.max(distance * 1.85, fogNear * 1.4);
-  return { distance, position, center, fogNear, fogFar };
+  return { distance, center: center.clone(), fogNear, fogFar };
 }
 
-async function loadModels(rig, manifest) {
+async function loadModels(rig, manifest, anisotropy) {
   const loader = new GLTFLoader();
   const pickables = [];
   const loaded = [];
@@ -231,11 +231,7 @@ async function loadModels(rig, manifest) {
       const [rx, ry, rz] = item.rotation || [0, 0, 0];
       node.position.set(px, py, pz);
       // 清单里按 Blender 的习惯写角度,这里转成弧度
-      node.rotation.set(
-        THREE.MathUtils.degToRad(rx),
-        THREE.MathUtils.degToRad(ry),
-        THREE.MathUtils.degToRad(rz),
-      );
+      node.rotation.set(deg(rx), deg(ry), deg(rz));
       node.scale.setScalar(item.scale ?? 1);
 
       node.traverse((child) => {
@@ -243,11 +239,19 @@ async function loadModels(rig, manifest) {
         meshes += 1;
         child.castShadow = true;
         child.receiveShadow = true;
+        const material = child.material;
+        for (const slot of TEXTURE_SLOTS) {
+          const texture = material?.[slot];
+          if (texture) {
+            texture.anisotropy = anisotropy;
+            texture.needsUpdate = true;
+          }
+        }
         if (item.spot) {
           // hover 要改 emissive,材质可能是共享的 —— 先给可点的这份单独一份
-          child.material = child.material.clone();
+          child.material = material.clone();
           child.userData.spot = item.spot;
-          child.userData.baseEmissive = child.material.emissive
+          child.userData.baseEmissive = child.userData.baseEmissive = child.material.emissive
             ? child.material.emissive.getHex()
             : 0x000000;
           child.userData.baseEmissiveIntensity = child.material.emissiveIntensity ?? 1;
@@ -259,7 +263,6 @@ async function loadModels(rig, manifest) {
       loaded.push(node.name);
     } catch (error) {
       console.warn(`[room3d] 加载失败: ${item.file}`, error);
-      loaded.push(`失败:${item.name}`);
     }
   }
 
@@ -289,10 +292,23 @@ function start(host) {
   renderer.toneMappingExposure = 1.05;
   host.appendChild(renderer.domElement);
 
+  const anisotropy = Math.min(ANISOTROPY, renderer.capabilities.getMaxAnisotropy() ?? 1);
+
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 2000);
   const { scene, hemi, key, fill } = createScene(colors);
   const rig = new THREE.Group();
   scene.add(rig);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enablePan = false;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.rotateSpeed = 0.6;
+  controls.zoomSpeed = 0.5;
+  controls.minPolarAngle = deg(POLAR_LIMITS[0]);
+  controls.maxPolarAngle = deg(POLAR_LIMITS[1]);
+  controls.minAzimuthAngle = deg(AZIMUTH_LIMITS[0]);
+  controls.maxAzimuthAngle = deg(AZIMUTH_LIMITS[1]);
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2(-10, -10);
@@ -304,77 +320,72 @@ function start(host) {
   let center = new THREE.Vector3();
   let size = new THREE.Vector3(1, 1, 1);
   let framing = null;
+  let placed = false;
   let reduced = motionQuery.matches;
   let loop = 0;
   let hovered = null;
-  let focusSpot = null;
+  let focused = null;
+  let dragging = null;
   const parallax = { x: 0, y: 0, tx: 0, ty: 0 };
-  const orbit = { yaw: 0, pitch: 0, targetYaw: 0, targetPitch: 0 };
-  const zoom = { value: 1, target: 1 };
+  const targetGoal = new THREE.Vector3();
 
   const label = document.createElement('div');
   label.className = 'obj-label';
   label.hidden = true;
   host.appendChild(label);
 
-  const draw = () => {
-    loop = 0;
-    parallax.x += (parallax.tx - parallax.x) * EASE;
-    parallax.y += (parallax.ty - parallax.y) * EASE;
-    orbit.yaw += (orbit.targetYaw - orbit.yaw) * ORBIT_EASE;
-    orbit.pitch += (orbit.targetPitch - orbit.pitch) * ORBIT_EASE;
-    zoom.value += (zoom.target - zoom.value) * EASE;
-    applyRigRotation();
-    applyCamera();
-    renderOnce();
-    updateLabel();
-    if (!reduced) loop = requestAnimationFrame(draw);
-  };
-
-  // 静止态(关掉动效、或没在拖)时也要有个姿势,所以旋转/相机单独抽出来算
-  const applyRigRotation = () => {
-    if (reduced) {
-      parallax.x = 0;
-      parallax.y = 0;
-      rig.rotation.set(0, 0, 0);
-      return;
-    }
-    rig.rotation.y = orbit.yaw + parallax.x;
-    rig.rotation.x = orbit.pitch + parallax.y;
-  };
-
-  const applyCamera = () => {
-    if (!framing) return;
-    const { position, center: look } = framing;
-    const k = zoom.value;
-    camera.position.set(
-      look.x + (position.x - look.x) * k,
-      look.y + (position.y - look.y) * k,
-      look.z + (position.z - look.z) * k,
-    );
-    camera.lookAt(look.x, look.y, look.z);
-  };
-
   const renderOnce = () => renderer.render(scene, camera);
 
-  const settle = () => {
-    if (reduced) {
-      // 关掉动效时不做持续渲染,只在尺寸/主题/交互后补一帧
-      applyRigRotation();
-      applyCamera();
-      renderOnce();
-      updateLabel();
-      return;
+  const draw = () => {
+    loop = 0;
+    if (!reduced) {
+      // 视差是「自己动」的那部分,所以它才是该被减弱动效关掉的;
+      // 阻尼和拖拽属于「跟着手动」,任何时候都得响应。
+      parallax.x += (parallax.tx - parallax.x) * PARALLAX_EASE;
+      parallax.y += (parallax.ty - parallax.y) * PARALLAX_EASE;
+      rig.rotation.y = parallax.x;
+      rig.rotation.x = parallax.y;
     }
-    if (!loop) loop = requestAnimationFrame(draw);
+    controls.target.lerp(targetGoal, TARGET_EASE);
+    controls.update();
+    renderOnce();
+    updateLabel();
+    loop = requestAnimationFrame(draw);
   };
 
-  const schedule = settle;
+  const schedule = () => {
+    if (!loop) loop = requestAnimationFrame(draw);
+  };
 
   const applyFog = () => {
     if (!framing) return;
     scene.fog.near = framing.fogNear;
     scene.fog.far = framing.fogFar;
+  };
+
+  /**
+   * 取景。第一次按固定俯角摆好;之后(窗口变化或添了家具)只改半径、
+   * 保住用户已经转到的水平角度,不然每次 resize 都会被拽回正前方。
+   */
+  const refit = () => {
+    if (!framing) return;
+    const look = framing.center;
+    const spherical = new THREE.Spherical();
+    if (placed) {
+      spherical.setFromVector3(camera.position.clone().sub(controls.target));
+    } else {
+      spherical.phi = Math.PI / 2 - CAMERA_PITCH;
+      spherical.theta = 0;
+      placed = true;
+    }
+    spherical.radius = framing.distance;
+    spherical.makeSafe();
+    camera.position.copy(look.clone().add(new THREE.Vector3().setFromSpherical(spherical)));
+    controls.target.copy(look);
+    controls.minDistance = framing.distance * DISTANCE_RANGE[0];
+    controls.maxDistance = framing.distance * DISTANCE_RANGE[1];
+    if (!focused) targetGoal.copy(look);
+    controls.update();
   };
 
   const resize = () => {
@@ -383,6 +394,7 @@ function start(host) {
     renderer.setSize(width, height, false);
     framing = fitCamera(camera, host, center, size);
     applyFog();
+    refit();
     schedule();
   };
 
@@ -402,7 +414,7 @@ function start(host) {
       walls.back.material.color = new THREE.Color(colors.wallBack);
       walls.side.material.color = new THREE.Color(colors.wallSide);
     }
-    schedule();
+    renderOnce();
   };
 
   const setHovered = (mesh) => {
@@ -418,7 +430,6 @@ function start(host) {
     }
     host.dataset.hover = hovered ? hovered.userData.spot || '' : '';
     host.style.cursor = hovered ? 'pointer' : '';
-    schedule();
   };
 
   const pickAt = (updateHover) => {
@@ -437,10 +448,10 @@ function start(host) {
       return;
     }
     const anchor = hovered.userData.anchor || new THREE.Vector3();
-    const point = anchor.clone().applyMatrix4(hovered.matrixWorld);
-    point.project(camera);
+    const point = anchor.clone().applyMatrix4(hovered.matrixWorld).project(camera);
     const box = host.getBoundingClientRect();
-    label.style.transform = `translate(-50%, -100%) translate(${((point.x + 1) / 2) * box.width}px, ${((1 - point.y) / 2) * box.height}px)`;
+    label.style.transform =
+      `translate(-50%, -100%) translate(${((point.x + 1) / 2) * box.width}px, ${((1 - point.y) / 2) * box.height}px)`;
     label.textContent = hovered.userData.label || spotLabel(hovered.userData.spot);
     label.hidden = false;
   };
@@ -450,23 +461,14 @@ function start(host) {
     const nx = (event.clientX - rect.left) / Math.max(rect.width, 1);
     const ny = (event.clientY - rect.top) / Math.max(rect.height, 1);
     pointer.set(nx * 2 - 1, -(ny * 2 - 1));
-
     if (dragging) {
-      const dx = event.clientX - dragging.x;
-      const dy = event.clientY - dragging.y;
-      dragging.x = event.clientX;
-      dragging.y = event.clientY;
-      dragging.travel += Math.abs(dx) + Math.abs(dy);
-      if (!reduced) {
-        orbit.targetYaw = clamp(orbit.targetYaw + dx * DRAG_YAW_PER_PX, -ORBIT_YAW_LIMIT, ORBIT_YAW_LIMIT);
-        orbit.targetPitch = clamp(orbit.targetPitch + dy * DRAG_PITCH_PER_PX, -ORBIT_PITCH_LIMIT, ORBIT_PITCH_LIMIT);
-      }
+      dragging.travel += Math.abs(event.movementX || 0) + Math.abs(event.movementY || 0);
       return;
     }
-
-    if (reduced) return;
-    parallax.tx = (nx - 0.5) * PARALLAX_YAW;
-    parallax.ty = -(ny - 0.5) * PARALLAX_PITCH;
+    if (!reduced) {
+      parallax.tx = (nx - 0.5) * PARALLAX_YAW;
+      parallax.ty = -(ny - 0.5) * PARALLAX_PITCH;
+    }
     pickAt(true);
   });
 
@@ -477,66 +479,51 @@ function start(host) {
     setHovered(null);
   });
 
-  let dragging = null;
   host.addEventListener('pointerdown', (event) => {
-    dragging = { x: event.clientX, y: event.clientY, travel: 0 };
-    host.setPointerCapture?.(event.pointerId);
-    if (!reduced) host.style.cursor = 'grabbing';
+    dragging = { travel: 0 };
+    void event;
   });
 
-  const endDrag = (event) => {
+  host.addEventListener('pointerup', () => {
     if (!dragging) return;
     const traveled = dragging.travel;
     dragging = null;
-    host.releasePointerCapture?.(event?.pointerId);
-    host.style.cursor = hovered ? 'pointer' : '';
-    // 拖过一段距离就不算「点这一下」,否则每次转完视角都会误开面板
+    // 拖过一段距离就不算「点这一下」
     if (traveled > DRAG_THRESHOLD) return;
     const mesh = pickAt(false);
-    if (mesh?.userData.spot) {
-      focusOn(mesh);
-      document.dispatchEvent(new CustomEvent('noke:pick', { detail: mesh.userData.spot }));
-    }
-  };
-
-  host.addEventListener('pointerup', endDrag);
-  host.addEventListener('pointercancel', () => {
-    dragging = null;
-    host.style.cursor = hovered ? 'pointer' : '';
+    if (!mesh?.userData.spot) return;
+    focusOn(mesh);
+    document.dispatchEvent(new CustomEvent('noke:pick', { detail: mesh.userData.spot }));
   });
 
-  /** 点中之后把 rig 转向那个物件、镜头推近一点;标签文字也换成物件名。 */
+  /** 点中之后把注视点挪到那个物件上:镜头位置由 OrbitControls 管,不去抢。 */
   const focusOn = (mesh) => {
-    if (reduced) return;
-    mesh.updateWorldMatrix(true, false);
-    const world = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
-    const angle = Math.atan2(world.x - center.x, world.z - center.z);
-    orbit.targetYaw = clamp(-angle, -ORBIT_YAW_LIMIT, ORBIT_YAW_LIMIT);
-    zoom.target = FOCUS_DISTANCE;
-    focusSpot = mesh.userData.spot;
-    host.dataset.focused = focusSpot || '';
+    const box = new THREE.Box3().setFromObject(mesh);
+    const middle = box.getCenter(new THREE.Vector3());
+    targetGoal.copy(middle);
+    targetGoal.y -= box.getSize(new THREE.Vector3()).y * 0.15;
+    focused = mesh.userData.spot;
+    host.dataset.focused = focused || '';
   };
 
   const releaseFocus = () => {
-    if (focusSpot === null) return;
-    focusSpot = null;
-    zoom.target = 1;
-    orbit.targetYaw = 0;
-    orbit.targetPitch = 0;
+    if (focused === null) return;
+    focused = null;
+    if (framing) targetGoal.copy(framing.center);
     host.dataset.focused = '';
-    schedule();
   };
 
-  // 面板被关掉(往往是 Esc)时,镜头也该退回原位
+  // 面板被关掉(往往是 Esc)时,注视点也该退回场景中心
   document.addEventListener('noke:panel-closed', releaseFocus);
 
   window.addEventListener('resize', resize);
 
   motionQuery.addEventListener('change', (event) => {
     reduced = event.matches;
-    if (reduced && loop) {
-      cancelAnimationFrame(loop);
-      loop = 0;
+    if (reduced) {
+      rig.rotation.set(0, 0, 0);
+      parallax.tx = 0;
+      parallax.ty = 0;
     }
     schedule();
   });
@@ -552,51 +539,50 @@ function start(host) {
   const boot = async () => {
     let result;
     try {
-      result = await loadModels(rig, manifest);
-    pickables = result.pickables;
+      result = await loadModels(rig, manifest, anisotropy);
+      pickables = result.pickables;
 
-    if (!rig.children.length) {
-      console.warn('[room3d] 一个模型都没加载上');
+      if (!rig.children.length) {
+        console.warn('[room3d] 一个模型都没加载上');
+        document.dispatchEvent(new CustomEvent('noke:room-ready'));
+        return;
+      }
+
+      const fitted = fitRig(scene, key, fill, rig);
+      center = fitted.center;
+      size = fitted.size;
+      // 地板比场景再放大一圈,镜头怎么转都看不见边
+      floor = createFloor(colors, Math.max(size.x, size.z), center);
+      scene.add(floor);
+      walls = createWalls(colors, size, center);
+      scene.add(walls.group);
+
+      // hover 标签的锚点:取每个可点物件自己的上沿
+      for (const mesh of pickables) {
+        const box = new THREE.Box3().setFromObject(mesh);
+        mesh.updateWorldMatrix(true, false);
+        mesh.userData.anchor = mesh.worldToLocal(box.max.clone());
+        mesh.userData.label = spotLabel(mesh.userData.spot);
+      }
+
+      resize();
+      host.dataset.roomReady = '1';
+      host.dataset.theme = document.documentElement.dataset.theme || '';
+      host.dataset.stats = JSON.stringify({
+        models: result.loaded,
+        meshes: result.meshes,
+        pickable: pickables.length,
+        lights: 3,
+        walls: 2,
+        fog: true,
+        controls: 'orbit',
+        anisotropy,
+        pixelRatio: renderer.getPixelRatio(),
+        // 场景包围盒:床或桌子摆歪、单位没换算对,这里一眼就能看出来(米)
+        spanMeters: [Number(size.x.toFixed(2)), Number(size.y.toFixed(2)), Number(size.z.toFixed(2))],
+        centerMeters: [Number(center.x.toFixed(2)), Number(center.y.toFixed(2)), Number(center.z.toFixed(2))],
+      });
       document.dispatchEvent(new CustomEvent('noke:room-ready'));
-      return;
-    }
-
-    const fitted = fitRig(scene, key, fill, rig);
-    center = fitted.center;
-    size = fitted.size;
-    // 地板比场景再放大一圈,镜头怎么转都看不见边
-    floor = createFloor(colors, Math.max(size.x, size.z), center);
-    scene.add(floor);
-    walls = createWalls(colors, size, center);
-    scene.add(walls.group);
-
-    // hover 标签的锚点:取每个可点物件自己的上沿
-    for (const mesh of pickables) {
-      const box = new THREE.Box3().setFromObject(mesh);
-      // Box3 的 max 是属性不是方法(r186 里没有 getMax)
-      const top = box.max.clone();
-      mesh.updateWorldMatrix(true, false);
-      const local = mesh.worldToLocal(top.clone());
-      mesh.userData.anchor = local;
-      mesh.userData.label = spotLabel(mesh.userData.spot);
-    }
-
-    resize();
-    host.dataset.roomReady = '1';
-    host.dataset.theme = document.documentElement.dataset.theme || '';
-    host.dataset.stats = JSON.stringify({
-      models: result.loaded,
-      meshes: result.meshes,
-      pickable: pickables.length,
-      lights: 3,
-      walls: 2,
-      fog: true,
-      pixelRatio: renderer.getPixelRatio(),
-      // 场景包围盒:床或桌子摆歪、单位没换算对,这里一眼就能看出来(米)
-      spanMeters: [Number(size.x.toFixed(2)), Number(size.y.toFixed(2)), Number(size.z.toFixed(2))],
-      centerMeters: [Number(center.x.toFixed(2)), Number(center.y.toFixed(2)), Number(center.z.toFixed(2))],
-    });
-    document.dispatchEvent(new CustomEvent('noke:room-ready'));
     } catch (error) {
       // 装配炸了要能看见:否则只剩一个「什么都没发生」的空场景
       console.warn('[room3d] 装配失败', error);
@@ -606,10 +592,6 @@ function start(host) {
   };
 
   boot();
-}
-
-function clamp(value, low, high) {
-  return Math.min(Math.max(value, low), high);
 }
 
 function findHost() {
