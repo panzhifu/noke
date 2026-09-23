@@ -3,3 +3,5 @@
 Cargo.lock.bak
 *.log
 .DS_Store
+# 助手的工作目录(记忆、临时产物),不进项目历史
+/.workbuddy
