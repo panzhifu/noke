@@ -202,3 +202,9 @@ python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:80
 - **`--public-url` 必须带**:不带的话 Trunk 生成的是根路径资源,子目录部署直接 404。
 - **body 的三行 grid**:`.room3d` 是 `fixed` 的、不占 grid 行,页脚会顺着往上跑一格。
   现在 `body:has(> .room3d)` 把它改成四行(顶栏 / 入口条 / 场景 / 页脚)。
+- **画布收不到拖拽 = 层叠顺序,不是 OrbitControls**:`.room3d` 的 `z-index` 一旦是负数,
+  CSS 绘制顺序里它排在 in-flow 的 `body` 盒子之前,命中测试按反序走 —— `body` 成了挡在画布
+  上面的那一层,`pointerdown` 一个都到不了 `OrbitControls`(换控制实现也治不好)。
+  同理,页面上任何一个 `z-index:2` 的透明盒子摊开铺满视口,房间中间也就拖不动了
+  (顶栏因此要 `align-self: start`,别让 grid 的 stretch 把它拉成满屏)。
+  核对方法:`document.elementFromPoint(房间中央)` 应当返回 `CANVAS`。

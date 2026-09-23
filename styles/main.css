@@ -148,6 +148,9 @@ code {
   justify-content: flex-end;
   gap: 16px;
   padding: 16px 22px 0;
+  /* grid 的 stretch 会把这条只装了一个图标的栏拉到占满 1fr 那一行,
+     一个看不见的 z-index:2 大盒子压在画布上,房间中间就拖不动了。 */
+  align-self: start;
 }
 
 .icon-btn {

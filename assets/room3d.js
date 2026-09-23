@@ -213,9 +213,11 @@ function fitCamera(camera, host, center, size) {
   camera.far = distance * 12;
   camera.updateProjectionMatrix();
 
-  // 雾按这段距离给:近处在画面里几乎看不见衰减,远处地面和墙根化进背景
-  const fogNear = Math.max(distance * 0.72, 1);
-  const fogFar = Math.max(distance * 1.85, fogNear * 1.4);
+  // 雾按这段距离给。平视时镜头几乎与地面平行,画面里最远的就是那面后墙
+  // (约 distance + 进深):近处要留到注视点之后才开始衰减,否则墙会被雾
+  // 抹成背景色,房间看着就是浮在黑夜里的一堆家具。
+  const fogNear = Math.max(distance * 1.05, 1);
+  const fogFar = Math.max(distance * 2.4, fogNear * 1.4);
   return { distance, center: center.clone(), fogNear, fogFar };
 }
 
