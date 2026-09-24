@@ -24,15 +24,18 @@ pub struct Model {
     /// 目前只有冰箱门（`fridge_door`）—— 几何与铰链都是从 `~/blender/fridge.blend`
     /// 自带的开门动画里定的，见 `target/tmp/export_fridge_door.py`。
     pub door: Option<&'static str>,
-    /// 点一下转多少度（转椅）。`Some(360.0)` = 点一下转一整圈，`None` = 不转。
+    /// 转椅要转的那个 glb 节点名（电竞椅是 `chair_upper`）；`None` = 不转。
+    /// 和 `door` 一样是「glb 里的节点名」：一圈多少度与缓出手感在 `assets/room/config.js`。
     ///
-    /// 转的是**模型根节点**的 Y —— 所以 glb 的原点必须落在旋转轴（底盘立柱）上，
-    /// 否则转起来会绕着一根偏心的轴公转。`tools/compress_glb.py` 的默认归一化是
-    /// 「按包围盒水平居中」，对转椅要改用「按底盘轴心居中」，见 `target/tmp/gaming_chair/pipe.py`。
-    pub spin: Option<f32>,
+    /// 这个节点的原点必须落在旋转轴（底盘立柱）上，否则转起来是绕着一根偏心的轴公转。
+    /// 底座（五个轮子 + 气压杆）留在**另一个节点**里不跟着转 —— 真转椅转的是座椅 + 椅背 + 扶手，
+    /// 整椅一起转的话轮子会在地上画圈。两者都是导出时按蒙皮权重切开的，见
+    /// `target/tmp/gaming_chair/split_spin.py`（`seatBase` 那一支归上半身，其余归底座）。
+    pub spin: Option<&'static str>,
 }
 
-/// 目前有地毯、书桌、桌上的显示器、唱机和一台玻璃侧透的机箱、床、一台冰箱、一把电竞椅。
+/// 目前有地毯、书桌、桌上的显示器 + 键盘 + 唱机(唱机上躺一张黑胶) + 玻璃侧透的机箱、
+/// 床、一台冰箱、一把电竞椅。
 /// 往后的家具按 Blender 里的坐标直接加在后面就行。
 pub const MODELS: &[Model] = &[
     Model {
@@ -102,6 +105,30 @@ pub const MODELS: &[Model] = &[
         spin: None,
     },
     Model {
+        name: "vinyl",
+        file: "assets/models/vinyl.glb",
+        // 一张 12 寸黑胶(AC/DC《Highway to Hell》,Atlantic 厂牌),躺在唱机上。
+        //
+        // 源文件里这张盘是**斜 43°** 摆的 —— 三个轴都不薄,所以「最薄一面当顶」那条启发式
+        // 对它没用(第一版直接把一根面内轴当法线,盘子是立起来的)。所以先走
+        // `target/tmp/vinyl/level.py`:按顶点协方差取**最小**特征向量当法线、转到水平,
+        // 再进压缩管线 `compress_glb.py leveled.glb 输出 1000 1024 "" 95` ——
+        // 768 面一点不降,三张 1024² 转 WebP 95。799 KB → 186 KB。
+        //
+        // 落点是量的:唱盘圆心在唱机自己的 (-0.057, +0.040)、盘面高约 0.058
+        // (顶视/侧视各叠一层坐标网格量的,见 `target/tmp/pc/grid.py`),
+        // 再按唱机那条 -25° 转回世界坐标。盘面高度是图上读的,±3 mm ——
+        // 唱片要是吃进垫子里或者浮着,改这里的 y。
+        position: (-0.689, 0.778, -1.338),
+        // 155° = 跟着唱机一起斜 -25°,再翻 180° 把标签上的字转到朝镜头(烘完字的上沿在 -Z)。
+        rotation: (0.0, 155.0, 0.0),
+        scale: 1.0,
+        // 纯装饰:唱机本身就不开面板,唱片跟着它。
+        spot: None,
+        door: None,
+        spin: None,
+    },
+    Model {
         name: "desk",
         file: "assets/models/desk.glb",
         // 桌子模型本身在原点、底面贴 y=0,所以位置只用来挪它。
@@ -133,6 +160,26 @@ pub const MODELS: &[Model] = &[
         rotation: (0.0, 0.0, 0.0),
         scale: 0.00513,
         // 点它开「作品」那格 —— 和书桌是同一个入口,但屏幕才是这屋里最像「工作」的东西。
+        spot: Some("work"),
+        door: None,
+        spin: None,
+    },
+    Model {
+        name: "keyboard",
+        file: "assets/models/keyboard.glb",
+        // 一块 60% 机械键盘(绿 + 米白键帽)。13,694 面、6 张贴图全是 1024² ——
+        // 键帽上的字是几何 + 贴图一起撑起来的,降面就糊,所以一点不降、一点不缩:
+        // `compress_glb.py 源 输出 14000 1024 "" 95 0.00031328`。3.43 MB → 855 KB。
+        //
+        // 第 7 个参数是单位:这个包一个单位只有 0.31 mm(整包最大边 957.6),
+        // 「>30 当厘米」除完 100 还是 9.58 m。换成米就是 0.30 宽 × 0.107 深 × 0.031 高
+        // —— 一块标准 60% 的尺寸。
+        position: (0.0, 0.716, -1.3),
+        // 空格那一排在模型自己的 +Z(顶视图量的:数字行在 -Z 那侧),也就是朝椅子,
+        // 所以不用转。摆在显示器(z 占 -1.62~-1.42)前面,两者留出 0.07 的空隙。
+        rotation: (0.0, 0.0, 0.0),
+        scale: 1.0,
+        // 书桌、显示器、键盘开的是同一格「作品」—— 这一片就是工作台。
         spot: Some("work"),
         door: None,
         spin: None,
@@ -176,18 +223,19 @@ pub const MODELS: &[Model] = &[
         name: "gaming_chair",
         file: "assets/models/gaming_chair.glb",
         // 电竞椅(Sketchfab,作者 Man1ac,CC-BY-4.0 —— 署名在「关于」那格,src/content.rs)。
-        // 蒙皮模型,压缩走 target/tmp/gaming_chair/pipe.py(原型分支):骨头的 custom_shape
-        // 清掉、armature 烘掉再 join、归一化按**底盘轴心**(骨架 wheelBase_10 那根骨头)居中 ——
-        // 按包围盒居中会偏心 3cm,转起来底座画圈。压出来 0.78 宽 × 1.26 高 × 0.73 深。
+        // 蒙皮模型,压缩走 target/tmp/gaming_chair/split_spin.py(原型分支):骨头的 custom_shape
+        // 清掉、armature 烘掉再 join,然后按蒙皮权重切成 `chair_base` + `chair_upper` 两个节点,
+        // 归一化按**底盘轴心**(骨架 wheelBase_10 那根骨头)居中 —— 按包围盒居中会偏心 3cm,
+        // 上半身转起来底座画圈。压出来 0.78 宽 × 1.26 高 × 0.73 深。
         position: (0.0, 0.0, -0.72),
         // 正前方从骨架算出 110.2°(椅背骨头 → 座椅骨头的水平连线取反),转 69.83° 面朝书桌 ——
         // 与办公椅并排出图核对过。Blender ↔ three 的旋转是反号。
         rotation: (0.0, 69.83, 0.0),
         scale: 1.0,
-        // 转椅:点一下转一圈。原点已在底盘轴心上(pipe.py 按轴心居中),原地打转不公转。
+        // 转椅:点一下只有上半身转一圈(座椅 + 椅背 + 扶手),轮子留在地上不动。
         spot: None,
         door: None,
-        spin: Some(360.0),
+        spin: Some("chair_upper"),
     },
 ];
 
@@ -207,7 +255,7 @@ pub fn manifest_json() -> String {
             None => "null".to_string(),
         };
         let spin = match model.spin {
-            Some(spin) => format!("{spin}"),
+            Some(spin) => format!("\"{spin}\""),
             None => "null".to_string(),
         };
         let (px, py, pz) = model.position;

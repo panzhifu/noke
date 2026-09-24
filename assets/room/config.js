@@ -50,7 +50,9 @@ export const DOOR_OPEN_DEG = 89.888;
 // 开关门的速度(每秒推进多少比例),同样是缓出
 export const DOOR_EASE = 4.5;
 
-// 转椅:点一下转一整圈。角度由清单里的 `spin` 给(度),这里只管手感。
+// 转椅:点一下转一整圈。清单里的 `spin` 给的是**要转的那个节点名**(上半身),
+// 角度与手感在这里 —— 和冰箱门那对 DOOR_OPEN_DEG / DOOR_EASE 一一对应。
+export const SPIN_DEG = 360;
 // 用指数逼近(起步快、收尾慢),和冰箱门、光照那套一个味道。
 export const SPIN_EASE = 4.2;
 // 收尾阈值(弧度):残差小于它就落定为整数圈。0.01 rad ≈ 0.57°,

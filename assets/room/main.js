@@ -39,6 +39,7 @@ import {
   PARALLAX_YAW,
   POLAR_LIMITS,
   ROOT_ID,
+  SPIN_DEG,
   SPIN_EASE,
   SPIN_MAX_QUEUED_TURNS,
   SPIN_SETTLE,
@@ -259,14 +260,15 @@ function start(host) {
   };
 
   /**
-   * 转椅。点一下加一圈(清单里 `spin` 给的度数,通常就是 360),缓出停下。
-   * 转的是模型根节点的 rotation.y —— 累加在清单给的那个基准角上(`base`),
-   * 所以清单里的朝向怎么写都不影响转;原点在底盘轴心上,是原地打转不是公转。
+   * 转椅。点一下加一圈(度数在 config 的 SPIN_DEG),缓出停下。
+   * 转的是清单里 `spin` 那个节点(上半身)自己的 rotation.y —— 累加在它此刻的角度上(`base`),
+   * 所以家具在清单里怎么摆朝向都不影响转。节点原点在底盘立柱上,转出来是原地打转不是公转;
+   * 底座是另一个节点,不动 —— 轮子留在地上,只有座椅 + 椅背 + 扶手转。
    * 连点不丢:目标角往后加,最多排到 SPIN_MAX_QUEUED_TURNS 圈。
    */
-  const toggleSpin = (node, degrees) => {
+  const toggleSpin = (node) => {
     if (!node) return;
-    const turn = deg(degrees);
+    const turn = deg(SPIN_DEG);
     if (!spin || spin.node !== node) {
       spin = { node, base: node.rotation.y, angle: 0, target: 0, turns: 0, animating: false };
     }
@@ -447,7 +449,7 @@ function start(host) {
       return;
     }
     if (mesh.userData.spin) {
-      toggleSpin(mesh.userData.spin, mesh.userData.spinDeg);
+      toggleSpin(mesh.userData.spin);
       return;
     }
     if (!mesh.userData.spot) return;
