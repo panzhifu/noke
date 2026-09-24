@@ -31,6 +31,7 @@ import {
   CAMERA_FOV,
   DISTANCE_RANGE,
   DOOR_EASE,
+  DOOR_RECESS_DARK,
   DRAG_THRESHOLD,
   HOVER_EMISSIVE,
   LAMP_BULB_MATERIAL,
@@ -44,6 +45,7 @@ import {
   SPIN_MAX_QUEUED_TURNS,
   SPIN_SETTLE,
   STATE_EASE,
+  VINYL_RPM,
 } from './config.js';
 import { VARIANTS, readVariant, variant, variantKey } from './palette.js';
 import { readManifest } from './manifest.js';
@@ -157,6 +159,9 @@ function start(host) {
   let lampBulb = null;
   let door = null;
   let spin = null;
+  // 唱机上那张黑胶(清单里的 vinyl 那件)—— 房间灯开着时它在唱盘上转
+  let vinyl = null;
+  const vinylOmega = (VINYL_RPM * Math.PI * 2) / 60;
   let center = new THREE.Vector3();
   let size = new THREE.Vector3(1, 1, 1);
   let framing = null;
@@ -192,6 +197,10 @@ function start(host) {
     if (walls) {
       walls.back.material.color = new THREE.Color(current.wallBack);
       walls.side.material.color = new THREE.Color(current.wallSide);
+      // 暗腔也跟着状态走(它不受光,明暗全靠这个系数)
+      if (walls.recess) {
+        walls.recess.material.color = new THREE.Color(current.wallBack).multiplyScalar(DOOR_RECESS_DARK);
+      }
     }
   };
 
@@ -313,6 +322,20 @@ function start(host) {
     return true;
   };
 
+  /**
+   * 唱片:房间灯开着就在唱盘上转(33⅓ 转/分),灯一关就停。
+   * 「什么时候转」交给房间灯那枚开关,是因为这个循环是**按需渲染**的 —— 唱片常转就等于
+   * 帧循环永不停摆;挂在灯上,关灯静置照样停摆,省电那条还剩一半。
+   * 阴影贴图不跟着重画:这张盘是圆的,转起来投影没变。
+   */
+  const stepVinyl = (dt) => {
+    if (!vinyl || document.documentElement.dataset.lights !== 'on') return false;
+    vinyl.rotation.y += vinylOmega * dt;
+    // 折回一圈之内(一圈正好是 2π,视觉无跳变),连开几天也不掉精度
+    if (vinyl.rotation.y > Math.PI * 2) vinyl.rotation.y -= Math.PI * 2;
+    return true;
+  };
+
   const applyFog = () => {
     if (!framing) return;
     scene.fog.near = framing.fogNear;
@@ -382,11 +405,12 @@ function start(host) {
     targetGoal,
     isReduced: () => reduced,
     step: (dt) => {
-      // 三件事都要推:光照渐变、冰箱门、转椅(别让前一个把后一个短路掉)
+      // 这几件事都要推:光照渐变、冰箱门、转椅、唱片(别让前一个把后一个短路掉)
       const blending = stepState(dt);
       const swinging = stepDoor(dt);
       const turning = stepSpin(dt);
-      return blending || swinging || turning;
+      const spinning = stepVinyl(dt);
+      return blending || swinging || turning || spinning;
     },
     pick: () => pickAt(true),
   });
@@ -552,13 +576,33 @@ function start(host) {
         console.warn(`[room3d] 清单里认不出台灯的灯泡(材质名 ${LAMP_BULB_MATERIAL}),开灯时没有那团暖光`);
       }
 
+      // 唱机上那张黑胶:按清单里的 name 找到那件,房间灯开着时它在唱盘上转(见 stepVinyl)
+      vinyl = rig.getObjectByName('vinyl') || null;
+      if (!vinyl) console.warn('[room3d] 清单里没有名为 vinyl 的家具,唱片不会转');
+
+      // 门嵌在背墙上:先量门自己的包围盒 → 墙照着它开洞 → 再把门贴到墙面上。
+      // 顺序不能倒:墙的位置是从 size/center 推的,而门不参与那次测量(见 scene.js 的 fitRig),
+      // 所以贴墙这一步必须等 createWalls 把 backZ 定下来。
+      const doorNode = rig.getObjectByName('door') || null;
+      let doorway = null;
+      if (doorNode) {
+        rig.updateMatrixWorld(true);
+        doorway = new THREE.Box3().setFromObject(doorNode);
+      }
+
       // 地板与墙都挂进视差组,不能直接挂场景:鼠标带动的那点俯仰是绕原点转整组的,
       // 只离地 2mm 的地毯一旦和地板不同组,转过一侧就会被地板盖掉一条 ——
       // 「转动视角时地毯缺一块」就是这么来的。一起转就没有相对位移。
       floor = createFloor(current, Math.max(size.x, size.z), center);
       rig.add(floor);
-      walls = createWalls(current, size, center);
+      walls = createWalls(current, size, center, doorway);
       rig.add(walls.group);
+      if (doorNode) {
+        // 离墙 3mm:门框和墙面是两套网格,共面的那条边会打架(z-fighting)
+        doorNode.position.z = walls.backZ + 0.003;
+      } else {
+        console.warn('[room3d] 清单里没有名为 door 的家具,背墙就是一块整板');
+      }
 
       syncScene();
       resize();

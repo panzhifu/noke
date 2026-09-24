@@ -37,6 +37,15 @@ export const TARGET_LIFT = 0.4;
 export const WALL_HEIGHT = 5.6;
 export const WALL_SPAN = 2.6;
 export const WALL_PAD = 0.9;
+// 门洞后面那段暗腔的深度(米)。下限是门扇的长度 0.88 —— 这扇门是**往墙后开**的
+// (源文件里合页在左、门扇朝 -Z 那侧摆),开一半不能穿到腔外去。
+export const DOOR_RECESS_DEPTH = 1.2;
+// 暗腔有多黑:墙面色 × 这个数。它用的是不受光的材质(墙后没有灯),所以这个系数就是
+// 唯一的明暗来源 —— 深浅两套主题各自算一次,四个状态都跟着走。
+// 数要这么小是因为 Color 存的是**线性**值:×0.12 折算到屏幕上只等于 ×0.34,再经一层 ACES
+// 的暗部提升就更亮 —— 第一版给 0.12,开门看见的是水泥灰的柜子里侧。
+// (还有第三层:这个材质得关掉雾,不然腔底十来米的距离被雾抹成背景色,系数怎么调都是灰。)
+export const DOOR_RECESS_DARK = 0.02;
 
 // 台灯 glb(assets/models/desk_lamp.glb)里灯泡那颗球的**材质名** —— 认它不是为了好看,
 // 是「房间灯」那盏 SpotLight 得挂在灯泡上、开灯时的自发光也得落在它身上。
@@ -59,6 +68,11 @@ export const SPIN_EASE = 4.2;
 export const SPIN_SETTLE = 0.01;
 // 点得太快时不无限排队:最多排到「当前角度 + MAX_QUEUED_TURNS 圈」
 export const SPIN_MAX_QUEUED_TURNS = 3;
+
+// 唱盘转速:33⅓ 转/分(黑胶的标准速度),一圈 1.8 秒。只在房间灯开着时转 ——
+// 这个循环是按需渲染的,常转就等于永不停摆,所以「什么时候转」得挂在一个已有开关上
+// (见 main.js 的 stepVinyl)。
+export const VINYL_RPM = 100 / 3;
 
 // hover 时往材质里加的一点自发光(琥珀色),浅背景上够显眼又不刺眼
 export const HOVER_EMISSIVE = 0x3a2a10;

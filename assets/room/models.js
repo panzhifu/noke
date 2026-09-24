@@ -75,6 +75,9 @@ export async function loadModels(rig, manifest, anisotropy) {
       // 清单里按 Blender 的习惯写角度,这里转成弧度
       node.rotation.set(deg(rx), deg(ry), deg(rz));
       node.scale.setScalar(item.scale ?? 1);
+      // 嵌在墙上的家具(门):fitRig 量包围盒时会先把这类节点摘出去 ——
+      // 墙的位置就是从那个盒子推出来的,算进去等于把墙自己推远(见 scene.js 的 fitRig)
+      node.userData.wall = Boolean(item.wall);
 
       // 会开关的部件(冰箱门 / 唱机防尘盖):清单给的是 {node, axis, deg},按名字从 glb 里
       // 挑出那个节点。轴与角度**跟着模型走** —— 冰箱门是竖直铰链(绕 Y),防尘盖是水平铰链

@@ -9,9 +9,10 @@
 /// 一个能开关的部件：glb 里的节点名 + 绕哪根轴转 + 开到底多少度。
 ///
 /// 轴和角度都必须**跟着模型走**：冰箱门是竖直铰链（绕 Y、89.888°，从 `~/blender/fridge.blend`
-/// 自带的开门动画里反解出来，见 `target/tmp/export_fridge_door.py`），唱机防尘盖是水平铰链
-/// （绕 X、85.552°，那台没有动画、合页是底座的后上棱，量法见 `target/tmp/turntable/split_cover.py`）。
-/// 早先这两个数是一个全局的 `DOOR_OPEN_DEG` + 写死转 `rotation.y`，第二扇「门」一接上就错。
+/// 自带的开门动画里反解出来，见 `target/tmp/export_fridge_door.py`），而上一台唱机的防尘盖是
+/// 水平铰链（绕 X、85.552°，那台没有动画、合页是底座的后上棱，量法见
+/// `target/tmp/turntable/split_cover.py`）—— 现在这台小唱机不做开合了，但这两例说明的是同一件
+/// 事：早先这两个数是一个全局的 `DOOR_OPEN_DEG` + 写死转 `rotation.y`，第二扇「门」一接上就错。
 #[derive(Clone, Copy)]
 pub struct Door {
     pub node: &'static str,
@@ -44,10 +45,17 @@ pub struct Model {
     /// 整椅一起转的话轮子会在地上画圈。两者都是导出时按蒙皮权重切开的，见
     /// `target/tmp/gaming_chair/split_spin.py`（`seatBase` 那一支归上半身，其余归底座）。
     pub spin: Option<&'static str>,
+    /// 嵌在墙上的家具（这屋里的门）。`true` 表示它**不参与取景**：
+    /// 墙的位置是按场景包围盒算出来的（`fitRig` / `createWalls`），门要是一起算进去，
+    /// 盒子被撑大、墙就被自己推远，而且这个反馈没有不动点（墙退 0.9，门就得再往后贴 0.9）。
+    /// 表现是「加一扇门，整间屋子拉远一圈，门还悬在墙前面」。
+    /// 贴墙是 `main.js` 在 `createWalls` 之后做的，所以下面那个 `position` 的 z 只是给
+    /// devtools 里看着方便，真正贴着哪一面由墙说了算。
+    pub wall: bool,
 }
 
 /// 目前有地毯、书桌、桌上的显示器 + 键盘 + 鼠标 + 一盏剪式臂台灯、唱机(唱机上躺一张黑胶)、
-/// 一台玻璃侧透的机箱、床、一台冰箱、一把电竞椅。
+/// 一台玻璃侧透的机箱、床、一台冰箱、一把电竞椅,床尾立着一把电吉他。
 /// 往后的家具按 Blender 里的坐标直接加在后面就行。
 pub const MODELS: &[Model] = &[
     Model {
@@ -68,6 +76,7 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "bed",
@@ -85,6 +94,7 @@ pub const MODELS: &[Model] = &[
         spot: Some("about"),
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "fridge",
@@ -102,36 +112,30 @@ pub const MODELS: &[Model] = &[
             deg: 89.888,
         }),
         spin: None,
+        wall: false,
     },
     Model {
         name: "turntable",
         file: "assets/models/turntable.glb",
-        // Yamaha TT-300,0.43 × 0.42 × 0.38(防尘盖掀开),脚底贴 y=0。
-        // 面数几乎不降(2.5 万)、贴图保持 1024 且质量给到 90,所以细节是清楚的。
-        // 之前那版是同一台机子、但被压到 1.2 万面 + 质量 70,而且根节点的旋转丢了,
-        // 整台是**倒扣**的(看到的是底面铭牌,所以显得糊)。
+        // 一台小便携唱机(源包 modern_record_player.glb,Sketchfab):0.233 宽 × 0.218 深 ×
+        // 0.167 高(盖子掀开时的包围盒),脚底贴 y=0。3,268 面、三张 1024² 贴图,
+        // 1.02 MB → **274 KB**(换掉的那台 Yamaha TT-300 是 1.13 MB / 2.5 万面)。
         //
-        // 现在它分两个节点:`turntable_body`(机身,2.36 万面)+ `turntable_cover`(防尘盖,1374 面),
-        // 导出走 `target/tmp/turntable/split_cover.py 源 输出 25000 1024 90`。源包本来就把盖子
-        // 单独给了一个 `#RPL0002_Cover` 节点,所以是「按节点切」而不是像电竞椅那样按蒙皮权重切。
-        // y 给的是桌面高度:书桌 2.045 × 0.35 ≈ 0.72 —— 若唱机陷进桌面或浮着,改这个数。
+        // 单节点:这台**不做防尘盖开合**了(上一台那套切盖子 + 量合页的机制跟着撤了),
+        // 源包怎么摆就怎么出去。导出走 `target/tmp/record_player/export.py 源 输出 25000 1024 95`。
+        //
+        // 源包自带一张 7 寸唱片(`record`),会和清单里那张 AC/DC 黑胶落在同一个平面上、
+        // 两张盘 z-fighting,所以导出时把它丢掉了;丢掉之前先量了它 —— 唱盘圆心 (0.0169, -0.0118)
+        // (Blender x,y)、盘面高 0.0304、直径 0.165,就是下面 vinyl 那条的落点依据。
         position: (-0.62, 0.72, -1.35),
         // 稍微斜一点,别和桌边平行得像个贴图
         rotation: (0.0, -25.0, 0.0),
         scale: 1.0,
+        // 纯装饰:开「作品」交给书桌、显示器和键盘。它自己是不会动的 —— 会动的是上面那张黑胶。
         spot: None,
-        // 点唱机 = 掀开 / 盖上防尘盖。绕 x(水平铰链),开度 -85.552°。
-        // 符号是负的:glb 里烘的是**关着**的姿态(和冰箱门那条约定一样)—— 这台源模型摆的
-        // 是掀开的,导出时先绕合页转 +85.552° 落回闭合,网页再转相反数掀回去。
-        // 合页取底座的后上棱 (0.1607, 0.0872)。这个包没有自带开合动画(冰箱那台有),只能量:
-        // 一开始拿「盖子最低那圈顶点」当合页,那是垂在机身后壁外侧的裙边,低了 5 cm,
-        // 合下来整片扎进唱盘。
-        door: Some(Door {
-            node: "turntable_cover",
-            axis: 'x',
-            deg: -85.552,
-        }),
+        door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "vinyl",
@@ -144,18 +148,20 @@ pub const MODELS: &[Model] = &[
         // 再进压缩管线 `compress_glb.py leveled.glb 输出 1000 1024 "" 95` ——
         // 768 面一点不降,三张 1024² 转 WebP 95。799 KB → 186 KB。
         //
-        // 落点是量的:唱盘圆心在唱机自己的 (-0.057, +0.040)、盘面高约 0.058
-        // (顶视/侧视各叠一层坐标网格量的,见 `target/tmp/pc/grid.py`),
-        // 再按唱机那条 -25° 转回世界坐标。盘面高度是图上读的,±3 mm ——
-        // 唱片要是吃进垫子里或者浮着,改这里的 y。
-        position: (-0.689, 0.778, -1.338),
+        // 落点是量的:这台唱盘的圆心在唱机自己的 (0.0169, +0.0118)(three 的 x/z)、盘面高
+        // 0.0304,再按唱机那条 -25° 转回世界坐标;盘的底给到 0.0298,让**盘面**正好落在
+        // 0.0304 —— 就是源包自带那张唱片所在的平面。
+        position: (-0.6097, 0.7498, -1.3322),
         // 155° = 跟着唱机一起斜 -25°,再翻 180° 把标签上的字转到朝镜头(烘完字的上沿在 -Z)。
         rotation: (0.0, 155.0, 0.0),
-        scale: 1.0,
-        // 纯装饰:唱机本身就不开面板,唱片跟着它。
+        // 这台小机器只吃 7 寸盘(源包自带那张直径 0.165),所以 12 寸的盘缩到 0.5503。
+        scale: 0.5503,
+        // 纯装饰,但它是这屋里唯一自己在动的一件:房间灯开着时绕唱盘轴 33⅓ 转/分
+        // (见 assets/room/main.js 的 stepVinyl 与 config.js 的 VINYL_RPM)。
         spot: None,
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "desk",
@@ -171,6 +177,7 @@ pub const MODELS: &[Model] = &[
         spot: Some("work"),
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "computer",
@@ -192,6 +199,7 @@ pub const MODELS: &[Model] = &[
         spot: Some("work"),
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "keyboard",
@@ -212,6 +220,7 @@ pub const MODELS: &[Model] = &[
         spot: Some("work"),
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "computer_mouse",
@@ -234,6 +243,7 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "desk_lamp",
@@ -256,6 +266,7 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "pc_tower",
@@ -291,6 +302,7 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
+        wall: false,
     },
     Model {
         name: "gaming_chair",
@@ -309,6 +321,74 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: Some("chair_upper"),
+        wall: false,
+    },
+    Model {
+        name: "door",
+        file: "assets/models/door.glb",
+        // 一扇带门框的实木门(本地 `~/blender/门.blend` 建模,不是 Sketchfab 拿的)。
+        // 门扇 0.88 宽 × 2.1 高、门框外沿 1.02 × 2.18、厚 0.077,四个材质全是纯色
+        // (门扇橡木 / 门框胡桃 / 拉丝钢把手,一张贴图都没有)→ 导出不会丢东西。
+        //
+        // 导出走 `target/tmp/door/export.py 输出 2600`:两个节点 `door_frame`(门框,18 面,
+        // **不参与降面** —— 第一版一起降把顶框降歪了 2°)与 `door_leaf`(门扇 + 12 块嵌板 +
+        // 三副合页 + 双面把手,原点在合页轴上)。源文件摆的是**开着 90°**,按冰箱门那条约定
+        // 烘成关着的,所以清单里给 +90 把它转出去。顺手剥了没用的 UV(无贴图还带 TEXCOORD_0,
+        // 白占一百多 KB)。4.7 MB 的 .blend → **428 KB**。
+        //
+        // x 定在背墙书桌左边那段空墙(-2.3):床在 z=0.2、离墙还有三米,不会挡在门前。
+        // z 这个数只是给 devtools 看着方便 —— 背墙的位置是按包围盒算的,门贴在墙上由
+        // `main.js` 在 `createWalls` 之后负责(见下面 `wall: true`)。
+        position: (-2.3, 0.0, -3.01),
+        // 不转:导出时门面正好朝 +Z(镜头这一侧),合页在左手边。
+        rotation: (0.0, 0.0, 0.0),
+        scale: 1.0,
+        // 不开面板:点它是开门 / 关门。
+        spot: None,
+        // 绕竖直的 y 转 90°(合页轴就是那条竖线)。往哪边开由源文件定:门扇朝 three 的 -Z
+        // 那侧摆,也就是**往墙后的暗腔里开** —— 所以 `DOOR_RECESS_DEPTH` 得比门扇长。
+        door: Some(Door {
+            node: "door_leaf",
+            axis: 'y',
+            deg: 90.0,
+        }),
+        spin: None,
+        // 嵌在墙上:不参与取景,否则门把自己所在的墙推远(见 `wall` 字段的注释)
+        wall: true,
+    },
+    Model {
+        name: "guitar",
+        file: "assets/models/guitar.glb",
+        // 一把日落渐变的电吉他,插在落地支架上(Sketchfab 作者 Flow Studio,CC-BY-4.0 ——
+        // 署名在「关于」那格,src/content.rs)。源包 15.57 MB / 185,726 面 / 47 个部件 /
+        // 28 张 1024² 贴图。
+        //
+        // `compress_glb.py 源 输出 0 512 no-up 95 0.00267 draco` → **1.57 MB**(几何 1.00 /
+        // 贴图 0.57)。三个参数都得给:
+        // · `0` + `draco` —— 和机箱、床同一条判断:品丝、六根弦、旋钮这些一降面就糊,
+        //   字节交给 Draco,185,726 面一点不降。
+        // · `no-up` —— 它站在支架上本来就是直的,而包围盒**最薄的一面是进深 0.277**
+        //   (支架脚前后撑开的距离还没琴身左右宽),「最薄一面当顶」会把它放倒。
+        // · `0.00267` —— 这个包一个单位 = 2.67 mm(整包最大边 381.77),启发式除完 100
+        //   会变成 3.82 m 高。按它换成 0.383 宽 × 0.277 深 × 1.019 高 —— 一把琴连支架的正常个头。
+        //
+        // 贴图为什么敢降到 512:吉他在默认机位上只有约 175 px 高,滚轮拉到最近也就 320 px。
+        // 同一机位把 1024 与 512 两版各渲一次比像素:平均差 0.002~0.030 / 255,99 分位
+        // 1 个灰阶,超过 8 灰阶的像素 0~40 个 / 51.8 万 —— 肉眼不可辨,省下 2 MB。
+        position: (-1.55, 0.0, -1.22),
+        // 琴脸在模型自己的 +Z(-Z 那面是素背板,实拍核对)。转 +30° 把琴脸转向镜头这一侧,
+        // 顺带让琴头斜朝后墙 —— 正对镜头会显得像贴在墙上的一张图。
+        //
+        // 落点是按转完之后的包围盒挑的:转 30° 占 x -1.785~-1.315 / z -1.436~-1.004,
+        // 左边不出床沿(床 x 到 -1.38、z 从 -0.89 起,留 0.11 空隙),右边不碰书桌(桌 x 从 -1.05 起)。
+        rotation: (0.0, 30.0, 0.0),
+        scale: 1.0,
+        // 纯装饰,和机箱同一个理由:join 完是 16 个材质分组,hover 只会点亮命中的那一组,
+        // 琴身会缺一块亮一块;挂 spot 还要每帧走完 18.6 万面。
+        spot: None,
+        door: None,
+        spin: None,
+        wall: false,
     },
 ];
 
@@ -340,9 +420,21 @@ pub fn manifest_json() -> String {
             concat!(
                 r#"{{"name":"{}","file":"{}","#,
                 r#""position":[{},{},{}],"rotation":[{},{},{}],"#,
-                r#""scale":{},"spot":{},"door":{},"spin":{}}}"#
+                r#""scale":{},"spot":{},"door":{},"spin":{},"wall":{}}}"#
             ),
-            model.name, model.file, px, py, pz, rx, ry, rz, model.scale, spot, door, spin
+            model.name,
+            model.file,
+            px,
+            py,
+            pz,
+            rx,
+            ry,
+            rz,
+            model.scale,
+            spot,
+            door,
+            spin,
+            if model.wall { "true" } else { "false" }
         ));
     }
     out.push(']');

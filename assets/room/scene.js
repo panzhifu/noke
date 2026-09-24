@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { LAMP_BULB_MATERIAL, WALL_HEIGHT, WALL_PAD, WALL_SPAN } from './config.js';
+import { DOOR_RECESS_DARK, DOOR_RECESS_DEPTH, LAMP_BULB_MATERIAL, WALL_HEIGHT, WALL_PAD, WALL_SPAN } from './config.js';
 
 export function createScene(variant) {
   const scene = new THREE.Scene();
@@ -72,8 +72,13 @@ export function findLampBulb(rig) {
  * 墙角:两片大板封出 -z 与 -x 那个角。镜头从 +z 侧看过来,这两面正好是背景。
  * 高度给到远处,让上边缘尽量出画;侧边则故意留在画里 —— pinchen 的舞台就是这样,
  * 墙不是封闭房间,是两块景片,边缘露着背景才像「摆出来的一角」。
+ *
+ * 给了 `doorway`(门在世界系里的包围盒)就把背墙换成「带一个矩形洞的板」,并在洞后面接一段
+ * **暗腔**:一个只画内壁的盒子(BackSide),正面那层朝后所以不画,从洞口看进去就是
+ * 「里面没开灯的另一个空间」。洞的尺寸直接取自门自己的包围盒 —— 门框多大洞就多大,
+ * 再抄一份数字到墙这边就一定会对不上。
  */
-export function createWalls(variant, size, center) {
+export function createWalls(variant, size, center, doorway = null) {
   const group = new THREE.Group();
   group.name = 'walls';
   const height = WALL_HEIGHT;
@@ -81,11 +86,38 @@ export function createWalls(variant, size, center) {
   const backZ = center.z - size.z / 2 - WALL_PAD;
   const sideX = center.x - size.x / 2 - WALL_PAD;
 
+  // 背墙:ShapeGeometry 出来的面和 PlaneGeometry 一样在 XY 平面上、法线朝 +Z,
+  // 差别是它可以带 holes(洞)。
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, 0);
+  shape.lineTo(width / 2, 0);
+  shape.lineTo(width / 2, height);
+  shape.lineTo(-width / 2, height);
+  shape.closePath();
+  let hole = null;
+  if (doorway) {
+    // 洞比门框每边小 8mm:让门框**压住**洞口那一圈,而不是留一条能看穿的黑缝。
+    // 底边不贴着 y=0 而是抬 2mm —— 洞的下边和轮廓重合时 earcut 会切出退化三角形。
+    const inset = 0.008;
+    hole = {
+      x0: doorway.min.x - center.x + inset,
+      x1: doorway.max.x - center.x - inset,
+      y0: 0.002,
+      y1: Math.min(doorway.max.y, height) - inset,
+    };
+    const path = new THREE.Path();
+    path.moveTo(hole.x0, hole.y0);
+    path.lineTo(hole.x1, hole.y0);
+    path.lineTo(hole.x1, hole.y1);
+    path.lineTo(hole.x0, hole.y1);
+    path.closePath();
+    shape.holes.push(path);
+  }
   const back = new THREE.Mesh(
-    new THREE.PlaneGeometry(width, height),
+    new THREE.ShapeGeometry(shape),
     new THREE.MeshStandardMaterial({ color: variant.wallBack, roughness: 0.95, metalness: 0 }),
   );
-  back.position.set(center.x, height / 2, backZ);
+  back.position.set(center.x, 0, backZ);
   back.receiveShadow = true;
 
   const side = new THREE.Mesh(
@@ -97,7 +129,30 @@ export function createWalls(variant, size, center) {
   side.receiveShadow = true;
 
   group.add(back, side);
-  return { group, back, side, height };
+
+  let recess = null;
+  if (hole) {
+    const w = hole.x1 - hole.x0;
+    const h = hole.y1 - hole.y0;
+    // 深度要容得下**往后开**的那扇门(门扇 0.88 长),不然开一半就穿到腔外面
+    const depth = DOOR_RECESS_DEPTH;
+    recess = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, depth),
+      // **不受光**(Basic):墙后那一截没有灯,要是还跟着半球光与主光走,它就被这间屋子的
+      // 光照成一块水泥灰的盒子(第一版就是这样,看着像墙里砌了个柜子)。按墙面色压暗之后
+      // 固定成暗色,深浅两套主题各自给一档,开门看见的就是「里面没开灯」。
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(variant.wallBack).multiplyScalar(DOOR_RECESS_DARK),
+        side: THREE.BackSide,
+        // 雾也要关掉:腔底离镜头十来米,早就过了雾的近端,不关的话它被抹成三四成的背景色,
+        // 材质给多黑都没用(实测 0.02 与 0.004 出来都是 sRGB 95 上下那一坨灰)。
+        fog: false,
+      }),
+    );
+    recess.position.set(center.x + (hole.x0 + hole.x1) / 2, (hole.y0 + hole.y1) / 2, backZ - depth / 2);
+    group.add(recess);
+  }
+  return { group, back, side, recess, height, backZ };
 }
 
 /**
@@ -119,7 +174,13 @@ export function createFloor(variant, span, center) {
  * 反弹光从地面朝上打,所以它的位置在场景下方。
  */
 export function fitRig(scene, lights, rig) {
+  // 嵌在墙上的家具(门)先摘下来再量包围盒,量完装回去:墙的位置就是从这个盒子推出来的,
+  // 门一算进去就把盒子撑大、把墙自己推远,而这个反馈**没有不动点** —— 墙退 0.9,门就得
+  // 再往后贴 0.9。表现是「加一扇门,整间屋子被拉远一圈、墙还贴不上」。
+  const mounted = rig.children.filter((child) => child.userData.wall);
+  for (const node of mounted) rig.remove(node);
   const bounds = new THREE.Box3().setFromObject(rig);
+  for (const node of mounted) rig.add(node);
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
   const span = Math.max(size.x, size.z, 1);

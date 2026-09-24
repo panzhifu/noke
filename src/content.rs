@@ -68,6 +68,8 @@ pub const ABOUT: &[&str] = &[
     "房间里那把电竞椅来自 Sketchfab 作者 Man1ac,以 CC-BY-4.0 授权使用。",
     "书桌底下那台侧透机箱同样来自 Sketchfab —— Daniel Cardona 的 Dream Computer Setup,\
      以 CC-BY-4.0 授权使用。",
+    "床尾和书桌之间那把电吉他(连支架)也是 Sketchfab 上的 —— Flow Studio 的 Electric \
+     Guitar,以 CC-BY-4.0 授权使用。",
 ];
 
 pub struct Highlight {
