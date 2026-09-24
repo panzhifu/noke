@@ -31,6 +31,9 @@ MODE = ARGS[4] if len(ARGS) > 4 else ""
 #   no-up   跳过"最薄的一面就是顶"的自动站直 —— 冰箱这类"高度是最长边"的家具会被那条规则放倒
 KEEP = MODE == "keep"
 SKIP_UPFIX = MODE in ("keep", "no-up")
+# 第 6 个参数可选:WebP 质量(默认 70)。机械模型(唱机、相机这类)的细节在 70 下会发糊,
+# 给到 88~92 更划算 —— 贴图本身也就 1MB 级,压完仍比源文件小得多。
+QUALITY = int(ARGS[5]) if len(ARGS) > 5 else 70
 
 
 def purge():
@@ -91,10 +94,18 @@ if len(imported) > 1:
 mesh = scene_meshes()[0]
 # join 不会解开父链,而 Sketchfab 包的 RootNode 带着很大的偏移 ——
 # 不解开的话后面把 location 归零也照样被父变换带走,fitRig 会被撑成一间大厅。
+#
+# ⚠️ 必须用 CLEAR_KEEP_TRANSFORM 而不是 CLEAR:glTF 导入时那层根节点的旋转
+# (Y-up → Z-up)也在父变换里,CLEAR 会连它一起丢掉,几何随之躺倒;
+# 后面的 up_fix 再盲目补 +90°,两者一正一负就翻成 180° ——
+# 唱机就是这么被压成倒扣的(底朝上,铭牌和 RCA 口露在外面)。保留变换则原地就站得住。
 bpy.ops.object.select_all(action="DESELECT")
 mesh.select_set(True)
 bpy.context.view_layer.objects.active = mesh
-bpy.ops.object.parent_clear(type="CLEAR")
+bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
+# 保留变换会把父链上的缩放也带下来(Sketchfab 的根常常是 ×100),
+# 而下面的 unit_scale 是「赋值」不是「相乘」—— 不先烘焙一次,42.7cm 会被再缩 100 倍成 4mm。
+bake(mesh)
 bpy.context.view_layer.update()
 dims, _, _ = dims_of(mesh)
 raw_dims = list(dims)
@@ -164,7 +175,7 @@ for img in images:
     # 不显式改 file_format,导出器会原样搬运磁盘上那份 PNG(1024 的 alpha PNG 最占地方)
     img.file_format = "WEBP"
     try:
-        img.save_quality = 70
+        img.save_quality = QUALITY
     except AttributeError:
         pass
     textures.append({"name": img.name[:26], "before": before, "after": f"{img.size[0]}x{img.size[1]}",
@@ -183,7 +194,7 @@ bpy.ops.export_scene.gltf(
     export_morph=False,
     # 只出 webp。add_webp 那套是"追加":原 PNG 仍然打进包里,体积直接翻倍。
     export_image_format="WEBP",
-    export_image_quality=70,
+    export_image_quality=QUALITY,
     use_selection=True,
 )
 
