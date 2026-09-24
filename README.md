@@ -13,7 +13,7 @@ Three.js 随仓库一起发布,运行时不从 CDN 拉任何东西。
 
 | 已经进 3D | 点了会开面板 |
 | --- | --- |
-| 地毯(铺在书桌下)、书桌、床、唱机、冰箱,外加一间「墙角 + 地板」的舞台与一盏台灯 —— 见 `src/room/manifest.rs` | 书桌(开「作品」)和床(开「关于」) |
+| 地毯(铺在书桌下)、书桌、床、唱机、冰箱、办公椅,外加一间「墙角 + 地板」的舞台与一盏台灯 —— 见 `src/room/manifest.rs` | 书桌(开「作品」)和床(开「关于」) |
 
 **冰箱门可以点开**:那台冰箱的 glb 里,门是一个独立节点,点它会摆开 / 合上(默认关着,
 缓出动画)。门开到底 89.888°、铰链在前右竖边 —— 这两个数不是估的,是从 `~/blender/fridge.blend`
@@ -69,6 +69,51 @@ trunk build --release              # 产物在 dist/
    高度是最长边的家具(冰箱这类)加 `no-up`,否则「最薄的一面当顶」会把它放倒。
 3. **在 `src/room/manifest.rs` 的 `MODELS` 里加一条**:路径、位置、旋转、缩放,以及可选的 `spot`。
 4. 给了 `spot` 就到此为止 —— 家具自己就能点了。`EntryBar` 是键盘/读屏通道,不用跟着改。
+
+### 贴图质量:先保证材质,再谈体积
+
+`compress_glb.py` 第 6 个参数是 WebP 质量(默认 70)。**深色 / 靠贴图讲细节的家具要给到 95**
+——低质量下丢的正是「材质看得出是什么」的那点信息。办公椅就是照这个来的:
+
+```bash
+blender --background --python tools/compress_glb.py -- \
+  ~/Downloads/office_chair.glb assets/models/office_chair.glb 12000 1024 no-up 95
+```
+
+| 质量 | 体积 | baseColor PSNR | normal PSNR |
+| --- | --- | --- | --- |
+| 88 | 1.26 MB | 41~53 dB | 31~52 dB |
+| **95** | **2.22 MB** | **47~52 dB** | **35~43 dB** |
+| 原图字节不动 | 9.29 MB | ∞ | ∞ |
+
+量到什么程度就够了:**在同一机位下把两个版本分别渲出来比像素**,办公椅 88 与 100 的差
+只有 1.26/255(超过 8 灰阶的像素 46 个 / 8.7 万),肉眼不可辨 —— 所以要更细的调整就别再往
+质量上加了,去看材质本身与打光(见下)。真要字节级无损,把第 6 个参数写成 100 即可,
+导出脚本 `target/tmp/chair/export_faithful.py` 是「只归一化、贴图一个字节都不动」的那一档。
+
+### 几何重的东西交给 Draco
+
+降面是最钝的一把刀:**皱褶、布料这类「形状本身就是内容」的模型,一降就糊**。
+床的褥子 + 枕头 + 床单原本是 30.7 万面,老版本按 2.5 万面压 —— 于是网站上那张床
+和原模型差了十万八千里。正解不是继续降面,而是**几何单独压缩**:
+
+```bash
+blender --background --python target/tmp/bed/export_bed.py -- \
+  ~/Downloads/messy_bed.glb assets/models/bed.glb 0 1024 95 draco
+#  第 3 个参数 0 = 不降面;最后一档 none | meshopt | draco
+```
+
+| 方案 | 几何 | 贴图(1024²,WebP 95) | 合计 | 面数 |
+| --- | --- | --- | --- | --- |
+| 降面到 2.5 万(旧) | 0.64 MB | 0.15 MB | 0.8 MB | 2.5 万 |
+| meshopt(无量化) | 8.27 MB | 1.25 MB | 9.5 MB | 30.7 万 |
+| **Draco** | **0.81 MB** | **1.25 MB** | **2.07 MB** | **30.7 万** |
+
+`meshopt` 在 Blender 里不做量化,单靠它省不了多少;Draco 带位置/法线/UV 量化,几何掉到 1/10。
+代价是要带解码器:`assets/vendor/addons/loaders/DRACOLoader.js` +
+`assets/vendor/addons/libs/draco/gltf/{draco_wasm_wrapper.js, draco_decoder.wasm, draco_decoder.js}`
+(约 760 KB,wasm 优先、js 兜底),`assets/room/models.js` 里一行 `setDecoderPath` 指向它。
+**没有 Draco 的模型照常加载**,解码器只在真碰到 Draco 网格时才去取 —— 所以这一档可以只给需要的家具用。
 
 ### 坐标系以 Blender 为准
 
@@ -205,7 +250,23 @@ python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:80
 **每次改完 3D 层都在 Edge(Chromium,SwiftShader 软渲染)里出图核对**,视口 1440×900 ——
 `target/tmp/` 里留了几个脚本:`verify_room.py`(起没起得来)、`shoot_states.py`(四态各一张,
 顺带核对属性与开关的 aria)、`verify_orbit.py`(轨道四角 + 拾取区域扫描)、
-`patch_preview.py` + `shoot_angles.py`(给预览副本打「URL 参数定机位」的补丁,按固定角度复现)。
+`patch_preview.py` + `shoot_angles.py`(给预览副本打「URL 参数定机位」的补丁,按固定角度复现)、
+`bed/check_points.py`(几个关键点的 hover 归属与点击后的 `focused`)、
+`bed/probe_pick_cost.py` 与 `chair/imgcmp.py`(拾取耗时、贴图 PSNR —— 判断改动值不值靠这两个)。
+注意 `Read` 看图时是**缩放显示**的(1440×900 显示成 1080×675),照图量像素再喂给 `page.mouse`
+会整体偏掉 —— 先按比例换算,或在页面里画标记核对。
+
+这一轮(办公椅进房间 + 换掉那张糊掉的床 + Draco)的结果:
+
+- 办公椅:从 `~/Downloads/office_chair.glb` 压成 2.22 MB(`12000 1024 no-up 95`,不降面),
+  纯装饰 —— `spot` / `door` 都是 `None`,不进 `pickables`,`pickable` 仍是 9(不会挡在书桌前截走点击)
+- 床:30.7 万面全几何 + Draco + WebP 95 = **2.07 MB**(几何 0.81 / 贴图 1.25);
+  旧版是 2.5 万面 + 贴图只剩 0.15 MB 的 0.8 MB,褥子的皱褶与条纹全没了 —— 这次换回来了
+- 拾取:未打补丁前 `intersectObjects` 命中床要 **20.6 ms**;换包围盒代理后 **0.152 ms**
+- `stats`:`models: [carpet, bed, fridge, turntable, desk, chair]`、`meshes 15`、`pickable 9`、
+  `spanMeters: [4.68, 1.34, 3.4]`(与加椅子前一致,构图没动)
+- 交互抽查:床 → `about`(点击后 `dataset.focused=about`、面板打开 1 个 pane)、
+  桌面 → `work`、冰箱 → `door`、椅子与墙面 → 不拾取;无 JS 报错、无失败请求
 
 再一轮(冰箱门 / 换唱机 / 压缩工具修复)之后的结果:
 
@@ -282,3 +343,11 @@ python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:80
 - **台灯的强度不能照抄 pinchen 的数**:那边场景一单位≈这边 0.1 米,它的 `lamp: 24` 换到
   米制大概是 0.2~1.6 这个量级(聚光衰减是 `decay: 2`,照度按 1/d² 掉)。直接抄 24 的话
   桌面会被烧成一片白。
+- 🔴 **面数一上来,拾取就成了瓶颈**:`Mesh.raycast` 是「先球/盒快筛,再逐三角形求交」——
+  射线一旦命中就要走遍全部三角形。床换成 Draco 全几何(30.7 万面)之后,
+  `intersectObjects` 实测 **20.6 ms / 次**,而这个拾取是**跟着帧**跑的一帧一次(见 `loop.js`:
+  高刷屏上 pointermove 能到 1kHz,所以刻意按帧摊),鼠标停在床上就一直掉帧。
+  现在 `models.js` 里给 ≥1 万面的网格换成**包围盒代理**(`useBoxPick`):射线与自己那块
+  几何的局部包围盒求交,命中的 `object` 仍然报真网格,所以 hover 高亮 / 指针形状 / `spot`
+  全都不变 —— 同一发射线从 20.6 ms 掉到 **0.152 ms**。代价是盒子角落那点空档也算命中,
+  对「一整张床」这种目标无所谓;像冰箱门(5082 面)这种要精确到拉手的,阈值以下不碰。

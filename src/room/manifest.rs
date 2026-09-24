@@ -50,9 +50,13 @@ pub const MODELS: &[Model] = &[
     Model {
         name: "bed",
         file: "assets/models/bed.glb",
-        // tools/compress_glb.py 处理过:已站直、按米重缩放、脚底贴 z=0、水平居中 ——
-        // 所以 scale 留 1.0,position 就是现实里的摆放位置(米)。
+        // 归一化过(厘米→米、脚底贴 z=0、水平居中),所以 scale 留 1.0,
+        // position 就是现实里的摆放位置(米)。
         // 1.34 宽 × 0.95 高 × 2.18 长,长边正好落在进深方向,不用再转。
+        //
+        // 这张床的「乱」全在几何上:褥子 + 枕头 + 床单 30.7 万面(旧版被降到 2.5 万,皱褶就糊了)。
+        // 几何靠 **Draco** 压(8.3 MB → 0.81 MB),贴图 1024² WebP 95 —— 一共 2.07 MB,
+        // 见 target/tmp/bed/export_bed.py。运行时解码器在 assets/vendor/addons/libs/draco/gltf/。
         position: (-2.05, 0.0, 0.2),
         rotation: (0.0, 0.0, 0.0),
         scale: 1.0,
@@ -99,6 +103,21 @@ pub const MODELS: &[Model] = &[
         scale: 0.35,
         // 点桌子开「作品」那格。
         spot: Some("work"),
+        door: None,
+    },
+    Model {
+        name: "chair",
+        file: "assets/models/office_chair.glb",
+        // 办公椅。tools/compress_glb.py 用 no-up 压过(它的「最薄一面」是进深不是高度,
+        // 自动站直会把它放倒):站直、厘米→米、脚底贴 y=0、水平居中,所以 scale 留 1.0。
+        // 压出来后 0.97 宽 × 1.26 高 × 0.93 深。
+        position: (0.0, 0.0, -0.72),
+        // 模型自带的朝向是 +Z(正对镜头),转 180° 才是面朝书桌 —— 这一步是渲图确认的,
+        // 不是从包围盒推的(两个方向都是 0.97 × 0.93,包围盒看不出正反)。
+        rotation: (0.0, 180.0, 0.0),
+        scale: 1.0,
+        // 纯装饰:点椅子不面板,而且它不进 pickables,不会挡在前面截走书的点击。
+        spot: None,
         door: None,
     },
 ];
