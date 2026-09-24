@@ -76,11 +76,17 @@ export async function loadModels(rig, manifest, anisotropy) {
       node.rotation.set(deg(rx), deg(ry), deg(rz));
       node.scale.setScalar(item.scale ?? 1);
 
-      // 会动的部件(冰箱门):按名字从 glb 里挑出来,点击时转它
+      // 会开关的部件(冰箱门 / 唱机防尘盖):清单给的是 {node, axis, deg},按名字从 glb 里
+      // 挑出那个节点。轴与角度**跟着模型走** —— 冰箱门是竖直铰链(绕 Y),防尘盖是水平铰链
+      // (绕 X),写死一套就必有一件是错的。节点原点在导出时就摆在铰链上。
       let door = null;
       if (item.door) {
-        door = node.getObjectByName(item.door) || null;
-        if (!door) console.warn(`[room3d] 清单里写了 door=${item.door},但 glb 里没有这个节点`);
+        const part = node.getObjectByName(item.door.node);
+        if (!part) {
+          console.warn(`[room3d] 清单里写了 door=${item.door.node},但 glb 里没有这个节点`);
+        } else {
+          door = { node: part, axis: item.door.axis, deg: item.door.deg };
+        }
       }
       // 转椅:清单里给 `spin`(节点名)就表示「点一下转一圈」,转的是那个节点自己的 Y ——
       // 和 door 一样按名字从 glb 里挑。节点原点得落在旋转轴(底盘立柱)上,否则偏心公转。

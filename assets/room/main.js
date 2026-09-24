@@ -31,9 +31,9 @@ import {
   CAMERA_FOV,
   DISTANCE_RANGE,
   DOOR_EASE,
-  DOOR_OPEN_DEG,
   DRAG_THRESHOLD,
   HOVER_EMISSIVE,
+  LAMP_BULB_MATERIAL,
   MAX_DPR,
   PARALLAX_PITCH,
   PARALLAX_YAW,
@@ -47,7 +47,7 @@ import {
 } from './config.js';
 import { VARIANTS, readVariant, variant, variantKey } from './palette.js';
 import { readManifest } from './manifest.js';
-import { createDeskLamp, createFloor, createScene, createWalls, fitRig } from './scene.js';
+import { createFloor, createScene, createWalls, findLampBulb, fitRig } from './scene.js';
 import { deg } from './config.js';
 import { CAMERA_PITCH, fitCamera } from './framing.js';
 import { loadModels } from './models.js';
@@ -154,7 +154,7 @@ function start(host) {
   let pickables = [];
   let floor = null;
   let walls = null;
-  let lampShade = null;
+  let lampBulb = null;
   let door = null;
   let spin = null;
   let center = new THREE.Vector3();
@@ -187,7 +187,7 @@ function start(host) {
     lights.bounce.intensity = current.bounceIntensity;
     lights.lamp.color = new THREE.Color(current.lamp);
     lights.lamp.intensity = current.lampIntensity;
-    if (lampShade) lampShade.emissive = new THREE.Color(current.lampEmissive);
+    if (lampBulb) lampBulb.emissive = new THREE.Color(current.lampEmissive);
     if (floor) floor.material.color = new THREE.Color(current.floor);
     if (walls) {
       walls.back.material.color = new THREE.Color(current.wallBack);
@@ -226,17 +226,25 @@ function start(host) {
   };
 
   /**
-   * 冰箱门。点一下开关,默认关着 —— 开是把门绕它自己的竖直铰链转 DOOR_OPEN_DEG:
-   * 门的那个节点原点就在铰链上(导出时定的),所以这里只管 rotation.y。
+   * 会开关的部件(冰箱门、唱机的防尘盖)。点一下开 / 合,默认关着 ——
+   * 绕清单给的那根轴转清单给的那个角度:那个节点的原点就在铰链上(导出时定的),
+   * 所以这里只管 `rotation[axis]`。
+   * 轴与角度必须跟着模型走:冰箱门是竖直铰链(绕 y、89.888°),防尘盖是水平铰链
+   * (绕 x、85.552°)—— 早先这里写死 `rotation.y` + 一个全局 `DOOR_OPEN_DEG`,
+   * 第二扇「门」一接上就必有一件是错的。
    */
-  const toggleDoor = (node) => {
-    if (!node) return;
-    if (!door || door.node !== node) {
-      door = { node, angle: 0, target: deg(DOOR_OPEN_DEG) };
+  const toggleDoor = (spec) => {
+    if (!spec) return;
+    const open = deg(spec.deg);
+    if (!door || door.node !== spec.node) {
+      door = { node: spec.node, axis: spec.axis, angle: 0, target: open, open: true };
     } else {
-      door.target = door.target > deg(DOOR_OPEN_DEG) * 0.5 ? 0 : deg(DOOR_OPEN_DEG);
+      door.open = !door.open;
+      door.target = door.open ? open : 0;
     }
-    host.dataset.door = door.target > 0 ? 'open' : 'closed';
+    // 状态用显式的 open 标志,不看 target 的正负:防尘盖的「掀开」是**负**角度
+    // (glb 里烘的是关着的姿态),按符号判断会把两件事报反。
+    host.dataset.door = door.open ? 'open' : 'closed';
     frame.invalidate();
   };
 
@@ -246,14 +254,14 @@ function start(host) {
     if (Math.abs(delta) < 1e-3) {
       if (door.angle !== door.target) {
         door.angle = door.target;
-        door.node.rotation.y = door.angle;
+        door.node.rotation[door.axis] = door.angle;
         renderer.shadowMap.needsUpdate = true;
       }
       return false;
     }
     // 指数逼近:起步快、收尾慢,和光照那套一个手感
     door.angle += delta * Math.min(1, dt * DOOR_EASE);
-    door.node.rotation.y = door.angle;
+    door.node.rotation[door.axis] = door.angle;
     // 门在动,阴影贴图得跟着重画
     renderer.shadowMap.needsUpdate = true;
     return true;
@@ -526,14 +534,23 @@ function start(host) {
       center = fitted.center;
       size = fitted.size;
 
-      // 台灯:自己拼的一盏,摆在书桌上当「房间灯」的灯源
-      const lamp = createDeskLamp();
-      lampShade = lamp.shade;
-      rig.add(lamp.group);
-      // 灯本体挂在灯罩那个支臂下,灯就跟着灯罩的倾角走 —— 不用手算世界坐标
-      lamp.group.children[2].add(lights.lamp, lights.lamp.target);
-      lights.lamp.position.set(0, 0.08, 0);
-      lights.lamp.target.position.set(0, -1, 0);
+      // 台灯进清单了(scene.js 里那盏程序化的已经拆了):「房间灯」那盏聚光挂在**灯泡**上,
+      // 开灯时的自发光也落在它身上。灯放在灯泡底缘再往下 2cm,不放球心 —— 罩子是扣在灯泡上的,
+      // 光得从罩口漏到桌面上来。跟着视差组走(和整间屋子一起被鼠标带着那点俯仰),和拆之前一样。
+      const bulb = findLampBulb(rig);
+      if (bulb) {
+        lampBulb = bulb.material;
+        rig.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(bulb);
+        const at = rig.worldToLocal(
+          new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y - 0.02, (box.min.z + box.max.z) / 2),
+        );
+        rig.add(lights.lamp, lights.lamp.target);
+        lights.lamp.position.copy(at);
+        lights.lamp.target.position.set(at.x, at.y - 1, at.z);
+      } else {
+        console.warn(`[room3d] 清单里认不出台灯的灯泡(材质名 ${LAMP_BULB_MATERIAL}),开灯时没有那团暖光`);
+      }
 
       // 地板与墙都挂进视差组,不能直接挂场景:鼠标带动的那点俯仰是绕原点转整组的,
       // 只离地 2mm 的地毯一旦和地板不同组,转过一侧就会被地板盖掉一条 ——
@@ -567,7 +584,11 @@ function start(host) {
         azimuthLimits: AZIMUTH_LIMITS,
         distanceRange: DISTANCE_RANGE,
         variants: Object.keys(VARIANTS),
-        doorOpenDeg: DOOR_OPEN_DEG,
+        // 清单里那些「能开关的部件」:名字 = 节点:轴@角度 —— 用来核对轴与角度真的跟着模型走
+        // (以前这里是一个全局 doorOpenDeg,第二扇门一接上就露馅)
+        doors: manifest
+          .filter((item) => item.door)
+          .map((item) => `${item.name}=${item.door.node}:${item.door.axis}@${item.door.deg}`),
         stateEase: STATE_EASE,
         demandRendering: true,
         // 装配完立刻的累计帧数:证明 boot 阶段没有连画一堆帧(静置后是否真停下,

@@ -1,5 +1,6 @@
 /**
- * 场景本体:灯光组、地板、墙角,以及一盏真的摆在书桌上的台灯。
+ * 场景本体:灯光组、地板、墙角,外加「房间灯那盏聚光该挂在哪儿」—— 台灯进清单之后,
+ * 灯头的位置是从模型里认出来的,不是这里写死的。
  *
  * 灯光组的形状照 pinchen.me 来:半球(天/地) + 主光(投影) + 补光 + 反弹光 + 一盏暖聚光。
  * 那边是「烘焙贴图为主 + 一盏聚光当房间灯」,这边全靠实时灯,所以四态之间的差别
@@ -9,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { DESK_LAMP, WALL_HEIGHT, WALL_PAD, WALL_SPAN, deg } from './config.js';
+import { LAMP_BULB_MATERIAL, WALL_HEIGHT, WALL_PAD, WALL_SPAN } from './config.js';
 
 export function createScene(variant) {
   const scene = new THREE.Scene();
@@ -52,50 +53,19 @@ export function createScene(variant) {
 }
 
 /**
- * 书桌右半边的一盏台灯。不是 glb —— 是拿基本体拼的,因为「房间灯」需要一个看得见的灯罩,
- * 而这一盏的位置必须和清单里的书桌对上(见 config.js 的 DESK_LAMP)。
+ * 台灯不拼了 —— 它进清单了(`assets/models/desk_lamp.glb`,见 src/room/manifest.rs)。
+ * 这里只留一件事:从加载完的家具里把**灯泡**那块几何挑出来。
  *
- * 返回灯罩的材质,开灯时 main.js 会把它的 emissive 一起插值成暖色。
+ * 按材质名认:这个包 30 个部件 join 成 7 个材质分组,灯泡那颗球是唯一用 LAMP_BULB_MATERIAL
+ * 的。灯头朝哪边、灯泡离桌面几厘米,都是导出与摆放定死的事,网页这边再手算一遍就是
+ * 一份会跟着模型过期的坐标。
  */
-export function createDeskLamp() {
-  const group = new THREE.Group();
-  group.name = 'desk_lamp';
-  group.position.set(DESK_LAMP.x, DESK_LAMP.y, DESK_LAMP.z);
-
-  const metal = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.5, metalness: 0.6 });
-  // 灯罩内侧看得见,所以双面;自发光由状态驱动,平时给一点暗色免得它白得发亮
-  const shade = new THREE.MeshStandardMaterial({
-    color: 0xd9d2c4,
-    roughness: 0.75,
-    metalness: 0,
-    side: THREE.DoubleSide,
-    emissive: new THREE.Color(0x2a2418),
-    emissiveIntensity: 1,
+export function findLampBulb(rig) {
+  let bulb = null;
+  rig.traverse((node) => {
+    if (!bulb && node.isMesh && node.material?.name === LAMP_BULB_MATERIAL) bulb = node;
   });
-
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.012, 24), metal);
-  base.position.y = 0.006;
-
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.34, 12), metal);
-  stem.position.y = 0.17;
-
-  // 灯罩朝桌面中心那侧歪一点,光才是打在桌面上而不是打直下
-  const arm = new THREE.Group();
-  arm.position.y = 0.34;
-  arm.rotation.z = deg(-22);
-
-  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.13, 0.16, 24, 1, true), shade);
-  cone.position.y = 0.08;
-
-  arm.add(cone);
-  group.add(base, stem, arm);
-
-  for (const mesh of [base, stem, cone]) {
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-  }
-
-  return { group, shade };
+  return bulb;
 }
 
 /**

@@ -6,6 +6,20 @@
 //! 也就是说，模型在 Blender 里摆在哪里，导出后在这里照抄就行，不做单位换算。
 //! 旋转写角度（度），three.js 那边自己转弧度。
 
+/// 一个能开关的部件：glb 里的节点名 + 绕哪根轴转 + 开到底多少度。
+///
+/// 轴和角度都必须**跟着模型走**：冰箱门是竖直铰链（绕 Y、89.888°，从 `~/blender/fridge.blend`
+/// 自带的开门动画里反解出来，见 `target/tmp/export_fridge_door.py`），唱机防尘盖是水平铰链
+/// （绕 X、85.552°，那台没有动画、合页是底座的后上棱，量法见 `target/tmp/turntable/split_cover.py`）。
+/// 早先这两个数是一个全局的 `DOOR_OPEN_DEG` + 写死转 `rotation.y`，第二扇「门」一接上就错。
+#[derive(Clone, Copy)]
+pub struct Door {
+    pub node: &'static str,
+    /// `'x'` | `'y'` | `'z'`
+    pub axis: char,
+    pub deg: f32,
+}
+
 /// 一件摆在房间里的东西。
 pub struct Model {
     /// 节点名，方便在 devtools 里认。
@@ -20,10 +34,8 @@ pub struct Model {
     /// 点了它打开哪一格面板；`None` 就是不面板。
     /// 取值要和 `crate::ui::panel::Spot` 对得上：`"work"` `"about"` `"notes"` `"contact"` `"poster:0"`。
     pub spot: Option<&'static str>,
-    /// glb 里那个「会动的节点」的名字：点了这类家具是**开关它**，不开面板。
-    /// 目前只有冰箱门（`fridge_door`）—— 几何与铰链都是从 `~/blender/fridge.blend`
-    /// 自带的开门动画里定的，见 `target/tmp/export_fridge_door.py`。
-    pub door: Option<&'static str>,
+    /// glb 里那个「会开关的部件」：点了这类家具是**开关它**，不开面板。
+    pub door: Option<Door>,
     /// 转椅要转的那个 glb 节点名（电竞椅是 `chair_upper`）；`None` = 不转。
     /// 和 `door` 一样是「glb 里的节点名」：一圈多少度与缓出手感在 `assets/room/config.js`。
     ///
@@ -34,8 +46,8 @@ pub struct Model {
     pub spin: Option<&'static str>,
 }
 
-/// 目前有地毯、书桌、桌上的显示器 + 键盘 + 唱机(唱机上躺一张黑胶) + 玻璃侧透的机箱、
-/// 床、一台冰箱、一把电竞椅。
+/// 目前有地毯、书桌、桌上的显示器 + 键盘 + 鼠标 + 一盏剪式臂台灯、唱机(唱机上躺一张黑胶)、
+/// 一台玻璃侧透的机箱、床、一台冰箱、一把电竞椅。
 /// 往后的家具按 Blender 里的坐标直接加在后面就行。
 pub const MODELS: &[Model] = &[
     Model {
@@ -84,24 +96,41 @@ pub const MODELS: &[Model] = &[
         scale: 1.0,
         // 冰箱不开面板:点它是开关门(见下面的 door 字段)。
         spot: None,
-        door: Some("fridge_door"),
+        door: Some(Door {
+            node: "fridge_door",
+            axis: 'y',
+            deg: 89.888,
+        }),
         spin: None,
     },
     Model {
         name: "turntable",
         file: "assets/models/turntable.glb",
         // Yamaha TT-300,0.43 × 0.42 × 0.38(防尘盖掀开),脚底贴 y=0。
-        // 压缩管线:`tools/compress_glb.py 源.glb 输出.glb 25000 1024 "" 90` ——
         // 面数几乎不降(2.5 万)、贴图保持 1024 且质量给到 90,所以细节是清楚的。
         // 之前那版是同一台机子、但被压到 1.2 万面 + 质量 70,而且根节点的旋转丢了,
         // 整台是**倒扣**的(看到的是底面铭牌,所以显得糊)。
+        //
+        // 现在它分两个节点:`turntable_body`(机身,2.36 万面)+ `turntable_cover`(防尘盖,1374 面),
+        // 导出走 `target/tmp/turntable/split_cover.py 源 输出 25000 1024 90`。源包本来就把盖子
+        // 单独给了一个 `#RPL0002_Cover` 节点,所以是「按节点切」而不是像电竞椅那样按蒙皮权重切。
         // y 给的是桌面高度:书桌 2.045 × 0.35 ≈ 0.72 —— 若唱机陷进桌面或浮着,改这个数。
         position: (-0.62, 0.72, -1.35),
         // 稍微斜一点,别和桌边平行得像个贴图
         rotation: (0.0, -25.0, 0.0),
         scale: 1.0,
         spot: None,
-        door: None,
+        // 点唱机 = 掀开 / 盖上防尘盖。绕 x(水平铰链),开度 -85.552°。
+        // 符号是负的:glb 里烘的是**关着**的姿态(和冰箱门那条约定一样)—— 这台源模型摆的
+        // 是掀开的,导出时先绕合页转 +85.552° 落回闭合,网页再转相反数掀回去。
+        // 合页取底座的后上棱 (0.1607, 0.0872)。这个包没有自带开合动画(冰箱那台有),只能量:
+        // 一开始拿「盖子最低那圈顶点」当合页,那是垂在机身后壁外侧的裙边,低了 5 cm,
+        // 合下来整片扎进唱盘。
+        door: Some(Door {
+            node: "turntable_cover",
+            axis: 'x',
+            deg: -85.552,
+        }),
         spin: None,
     },
     Model {
@@ -185,6 +214,50 @@ pub const MODELS: &[Model] = &[
         spin: None,
     },
     Model {
+        name: "computer_mouse",
+        file: "assets/models/computer_mouse.glb",
+        // 一只有线鼠标(Sketchfab)。源包 25,548 面 / 4.66 MB,压成 8,000 面 / 485 KB:
+        // `compress_glb.py 源 输出 8000 1024 "" 95 0.06`。
+        //
+        // 第 7 个参数 `0.06` 是单位:这个包一个单位 = 6 cm(整包最大边 2.0),那条
+        // 「>30 当厘米」的启发式对它没用(2.0 会被当成 2 米)。除完就是 0.12 长 × 0.067 宽
+        // × 0.039 高 —— 一只标准鼠标。
+        //
+        // 注意这个包**没有颜色贴图**:三张材质只有一个灰色 baseColorFactor + AO 图,
+        // 所以它是「灰塑料 + 环境光遮蔽」读出来的,别等它出花纹。
+        position: (0.28, 0.716, -1.24),
+        // 线头那一端(模型自己的 -X)是前面,转 -100° 让鼻尖朝显示器(-Z)、再朝右偏 10°,
+        // 和键盘(长边在 X)摆成一小撇右手位。
+        rotation: (0.0, -100.0, 0.0),
+        scale: 1.0,
+        // 纯装饰:开「作品」交给书桌、显示器和键盘。
+        spot: None,
+        door: None,
+        spin: None,
+    },
+    Model {
+        name: "desk_lamp",
+        file: "assets/models/desk_lamp.glb",
+        // 一盏剪式臂台灯(Sketchfab,30 个部件 join 成 7 个材质分组)。8,379 面 / 无贴图,
+        // `compress_glb.py 源 输出 8000 1024 no-up 95 0.2` → 404 KB。
+        //
+        // 两个参数都是必需的:
+        // · `no-up` —— 它站得笔直,但**最薄的一面是左右方向的深**(0.93 对 2.59 高),
+        //   「最薄一面当顶」那条启发式会把它放倒(第一版就被放倒过一次)。
+        // · `0.2` —— 这个包一个单位 = 20 cm,既不是米也不是厘米(最大边 2.59 会被当成 2.59 米)。
+        //   除完是 0.372 臂展 × 0.187 深 × 0.519 高,罩口约 0.13 —— 一盏真实的桌灯。
+        //
+        // 灯头在模型自己的 +X 那侧、底座偏 -X 约 4cm(包围盒是按中心归的,所以底座不在原点上)。
+        position: (0.62, 0.716, -1.3),
+        // 转 180° 让灯头朝书桌中心(-X)探过去,光才打在桌面上而不是打在墙上。
+        rotation: (0.0, 180.0, 0.0),
+        scale: 1.0,
+        // 纯装饰。「房间灯」那盏 SpotLight 与灯罩自发光都跟着这个模型走,见 assets/room/main.js。
+        spot: None,
+        door: None,
+        spin: None,
+    },
+    Model {
         name: "pc_tower",
         file: "assets/models/pc_tower.glb",
         // 一台玻璃侧透的机箱:主板、RTX 2080 Ti、一体式水冷,211,569 面全在几何上
@@ -251,7 +324,10 @@ pub fn manifest_json() -> String {
             None => "null".to_string(),
         };
         let door = match model.door {
-            Some(door) => format!("\"{door}\""),
+            Some(door) => format!(
+                r#"{{"node":"{}","axis":"{}","deg":{}}}"#,
+                door.node, door.axis, door.deg
+            ),
             None => "null".to_string(),
         };
         let spin = match model.spin {

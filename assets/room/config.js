@@ -38,20 +38,19 @@ export const WALL_HEIGHT = 5.6;
 export const WALL_SPAN = 2.6;
 export const WALL_PAD = 0.9;
 
-// 台灯的落点。这几个数必须和 src/room/manifest.rs 里书桌那条对得上:
-// 书桌在 (0, 0, -1.4)、桌面高 0.716、桌面 x 大约 ±1.05,所以灯摆在右半边靠后的桌面上。
-export const DESK_LAMP = { x: 0.62, y: 0.716, z: -1.3, height: 0.5 };
+// 台灯 glb(assets/models/desk_lamp.glb)里灯泡那颗球的**材质名** —— 认它不是为了好看,
+// 是「房间灯」那盏 SpotLight 得挂在灯泡上、开灯时的自发光也得落在它身上。
+// 这个包 30 个部件 join 成 7 个材质分组,只有灯泡用 Ceramic(其余全是黑金属)。
+// 换台灯模型时要跟着换这个名(找不到会在 console 里警告,表现是开灯没有那团暖光)。
+export const LAMP_BULB_MATERIAL = 'Ceramic';
 
-// 冰箱门开到底的角度(度)。这个数是从 ~/blender/fridge.blend 自带的开门动画里
-// 反解出来的:第 1 帧(开)与第 120 帧(闭)两个姿态之间的相对旋转就是 89.888°,
-// 铰链在前右竖边 —— 解算脚本见 target/tmp/export_fridge_door.py。
-// 门在 glb 里是个独立节点,原点就落在铰链上,所以网页这边只要转它自己的 Y。
-export const DOOR_OPEN_DEG = 89.888;
-// 开关门的速度(每秒推进多少比例),同样是缓出
+// 开关门的速度(每秒推进多少比例),同样是缓出。开到底多少度、绕哪根轴**跟着模型走**,
+// 写在清单的 door 里(冰箱门 89.888° 绕 y、唱机防尘盖 85.552° 绕 x)—— 早先这里是一个
+// 全局 DOOR_OPEN_DEG 加写死的 rotation.y,第二扇「门」一接上就必有一件是错的。
 export const DOOR_EASE = 4.5;
 
 // 转椅:点一下转一整圈。清单里的 `spin` 给的是**要转的那个节点名**(上半身),
-// 角度与手感在这里 —— 和冰箱门那对 DOOR_OPEN_DEG / DOOR_EASE 一一对应。
+// 角度与手感在这里 —— 和门那套一样,几何在清单、手感在 config。
 export const SPIN_DEG = 360;
 // 用指数逼近(起步快、收尾慢),和冰箱门、光照那套一个味道。
 export const SPIN_EASE = 4.2;
