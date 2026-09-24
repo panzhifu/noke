@@ -1,6 +1,6 @@
 """无头跑 Blender 压模型:合并成单网格 + 降面 + 贴图转 WebP + 归一化到「米、脚底贴地、水平居中」。
 
-用法:blender --background --python tools/compress_glb.py -- 输入.glb 输出.glb 目标三角面 贴图长边上限 [keep|no-up]
+用法:blender --background --python tools/compress_glb.py -- 输入.glb 输出.glb 目标三角面 贴图长边上限 [模式] [质量] [单位米数] [几何压缩]
 
 新模型(从 Downloads 拿进来的)不加 keep:会站直、换算成米、脚底贴地、水平居中,
 清单里 position/scale 直接照现实尺寸写。已经摆好的模型加 keep:只降面和压贴图,
@@ -17,6 +17,7 @@ import json
 import math
 import mathutils
 import os
+import struct
 import sys
 
 import bpy
@@ -34,6 +35,13 @@ SKIP_UPFIX = MODE in ("keep", "no-up")
 # 第 6 个参数可选:WebP 质量(默认 70)。机械模型(唱机、相机这类)的细节在 70 下会发糊,
 # 给到 88~92 更划算 —— 贴图本身也就 1MB 级,压完仍比源文件小得多。
 QUALITY = int(ARGS[5]) if len(ARGS) > 5 else 70
+# 第 7 个参数可选:源模型的「一个单位等于多少米」,给了就跳过下面那条厘米启发式。
+# 启发式是「最大边 > 30 就按厘米」,而 Sketchfab 上有一批包是**英寸**导出的:
+# 机箱那台整包最大边只有 19.6(= 50 cm 的一个正常中塔),启发式会把它当成 19.6 米。
+UNIT = float(ARGS[6]) if len(ARGS) > 6 and ARGS[6] else None
+# 第 8 个参数可选:几何压缩 none | draco | meshopt(默认 none)。
+# 形状本身就是内容的东西(布料皱褶、机箱里几百个元件)不能靠降面省字节,交给 Draco。
+CODEC = ARGS[7] if len(ARGS) > 7 and ARGS[7] else "none"
 
 
 def purge():
@@ -58,6 +66,72 @@ def bake(obj):
 
 def scene_meshes():
     return [o for o in bpy.data.objects if o.type == "MESH" and o.name in bpy.context.scene.objects]
+
+
+def check_output(path):
+    """回头读一遍自己写出的 glb —— 工具跑成功不等于产物能用。
+
+    只看一件事:每张 texture 是不是真指向一个 image。导出器把贴图转 WebP 失败时不会让
+    导出失败,而是留下一个没有 source 的空壳(见 to_rgb),它在 Blender 里预览不出来、
+    命令行也没有非零退出码,只有浏览器加载那一刻才炸。
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    length, _kind = struct.unpack("<II", raw[12:20])
+    gltf = json.loads(raw[20:20 + length].decode("utf-8", "replace").rstrip("\x00"))
+    shells = []
+    for index, texture in enumerate(gltf.get("textures", [])):
+        sources = [texture.get("source")] + [
+            ext.get("source") for ext in texture.get("extensions", {}).values() if isinstance(ext, dict)
+        ]
+        if all(source is None for source in sources):
+            shells.append(index)
+    return {
+        "textures": len(gltf.get("textures", [])),
+        "images": len(gltf.get("images", [])),
+        "texturesWithoutSource": shells,
+        "primitives": sum(len(mesh["primitives"]) for mesh in gltf.get("meshes", [])),
+        "draco": "KHR_draco_mesh_compression" in (gltf.get("extensionsRequired") or []),
+    }
+
+
+def to_rgb(img, rebuilt):
+    """灰度贴图(depth == 8)先自己重建成 RGB,别交给导出器。
+
+    Blender 5.2 的 glTF 导出器要把内嵌贴图转成 WebP 时,会 `image.copy()` 一份临时图再
+    `save()`(encode_image.py 的 `__encode_from_image`)。源图是**灰度 PNG** 的话这份副本
+    存不下来:日志里是「未能将图像 'Image_2.001' 保存至 /tmp/...」+「Image data is empty,
+    not exporting image」,而导出的 texture 变成一个没有 source 的空壳 —— 浏览器那边
+    GLTFLoader 读到就抛 `Cannot read properties of undefined (reading 'uri')`,
+    **整个模型加载失败**(机箱那台 24 张贴图里 3 张灰度,踩的就是这条)。
+    注意 `img.channels` 对这类图仍然报 4,只有 `img.depth` 说真话(8/24/32 = 灰度/RGB/RGBA)。
+    重建只是把像素照抄进一份新图(和导出器自己拼通道时走的同一条 foreach_get/set 路径),
+    色彩空间跟着原图,画质不受影响。
+    """
+    if img.depth != 8:
+        return img
+    name = img.name
+    width, height = img.size
+    fixed = bpy.data.images.new(f"{name}_rgb", width, height, alpha=False)
+    fixed.colorspace_settings.name = img.colorspace_settings.name
+    try:
+        import numpy
+
+        buf = numpy.empty(width * height * 4, dtype=numpy.float32)
+        img.pixels.foreach_get(buf)
+        fixed.pixels.foreach_set(buf)
+    except ImportError:  # 没带 numpy 的构建:走 Python 层,慢但不挑环境
+        fixed.pixels[:] = img.pixels[:]
+    fixed.pack()
+    for mat in bpy.data.materials:
+        tree = mat.node_tree
+        for node in tree.nodes if tree else []:
+            if getattr(node, "image", None) is img:
+                node.image = fixed
+    if img.users == 0:
+        bpy.data.images.remove(img)
+    rebuilt.append(f"{name}({width}x{height} 灰度 -> RGB)")
+    return fixed
 
 
 def bounds(obj):
@@ -120,8 +194,8 @@ if up_fix:
     bake(mesh)
     dims, _, _ = dims_of(mesh)
 
-# ---- 单位:最大边超过 30 就按厘米处理 ----
-unit_scale = 1.0 if KEEP else (0.01 if max(dims) > 30 else 1.0)
+# ---- 单位:最大边超过 30 就按厘米处理;第 7 个参数给了就直接用它 ----
+unit_scale = 1.0 if KEEP else (UNIT if UNIT else (0.01 if max(dims) > 30 else 1.0))
 if unit_scale != 1.0:
     mesh.scale = [unit_scale] * 3
 bake(mesh)
@@ -141,9 +215,9 @@ print("NORMALIZED " + json.dumps({
     "min": [round(v, 3) for v in low],
 }))
 
-# ---- 降面到目标 ----
+# ---- 降面到目标(写 0 = 一点都不降,几何交给 Draco) ----
 polys = len(mesh.data.polygons)
-ratio = min(1.0, TARGET_TRIS / max(polys, 1))
+ratio = 1.0 if TARGET_TRIS <= 0 else min(1.0, TARGET_TRIS / max(polys, 1))
 if ratio < 1.0:
     mod = mesh.modifiers.new("decimate", "DECIMATE")
     mod.decimate_type = "COLLAPSE"
@@ -165,7 +239,9 @@ for mat in bpy.data.materials:
             images.append(img)
 
 textures = []
+rebuilt = []
 for img in images:
+    img = to_rgb(img, rebuilt)
     width, height = img.size[0], img.size[1]
     before = f"{width}x{height}"
     width, height = img.size[0], img.size[1]
@@ -184,7 +260,7 @@ for img in images:
 bpy.ops.object.select_all(action="DESELECT")
 mesh.select_set(True)
 bpy.context.view_layer.objects.active = mesh
-bpy.ops.export_scene.gltf(
+export_kwargs = dict(
     filepath=DST,
     export_format="GLB",
     export_yup=True,
@@ -197,16 +273,27 @@ bpy.ops.export_scene.gltf(
     export_image_quality=QUALITY,
     use_selection=True,
 )
+if CODEC == "meshopt":
+    export_kwargs["export_meshopt_compression_enable"] = True
+    export_kwargs["export_meshopt_extension"] = "EXT_meshopt_compression"
+elif CODEC == "draco":
+    # 量化按 Blender 默认(位置 14 / 法线 10 / UV 12):0.5 m 的包围盒按 14 位分,
+    # 一格 30 µm,机箱里 4 mm 的电容也糊不了。
+    export_kwargs["export_draco_mesh_compression_enable"] = True
+bpy.ops.export_scene.gltf(**export_kwargs)
 
 print("RESULT " + json.dumps({
     "srcKB": round(os.path.getsize(SRC) / 1024),
     "dstKB": round(os.path.getsize(DST) / 1024),
+    "outputCheck": check_output(DST),
     "rawDimsBlender": [round(v, 2) for v in raw_dims],
     "dimsMeters": [round(v, 3) for v in dims],
     "upFix": up_fix,
     "unitScale": unit_scale,
+    "codec": CODEC,
     "trisBefore": tris_before,
     "trisAfter": polys_after,
     "decimateRatio": round(ratio, 4),
+    "grayToRgb": rebuilt,
     "textures": textures,
 }, ensure_ascii=False))

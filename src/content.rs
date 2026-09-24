@@ -65,6 +65,9 @@ pub const ABOUT: &[&str] = &[
     "喜欢在细节上花时间:一个视图为什么这么排,一次滚动为什么这么顺。也在玩 Leptos + \
      WebAssembly,这个站点本身就是那条路线的产物 —— 一间用 Three.js 渲染的房间,\
      家具模型慢慢在 Blender 里做出来。",
+    "房间里那把电竞椅来自 Sketchfab 作者 Man1ac,以 CC-BY-4.0 授权使用。",
+    "桌边那台侧透机箱同样来自 Sketchfab —— Daniel Cardona 的 Dream Computer Setup,\
+     以 CC-BY-4.0 授权使用。",
 ];
 
 pub struct Highlight {
