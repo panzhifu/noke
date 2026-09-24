@@ -8,12 +8,14 @@ use leptos::mount::mount_to_body;
 use leptos::prelude::*;
 use room::Room3D;
 use ui::entries::EntryBar;
+use ui::lights::{self, Lights};
 use ui::panel::{Panel, Spot};
-use ui::theme::{self, next_theme};
+use ui::theme::{self, Theme};
 
 #[component]
 pub fn App() -> impl IntoView {
-    let set_theme = theme::use_theme();
+    let (theme, set_theme) = theme::use_theme();
+    let (lights, set_lights) = lights::use_lights();
     let (spot, set_spot) = signal::<Option<Spot>>(None);
     hooks::on_escape(set_spot);
 
@@ -31,22 +33,68 @@ pub fn App() -> impl IntoView {
         </div>
 
         <div class="topbar">
+            // 房间灯:左端是灭、右端是亮,滑块停在哪端就是哪个状态 ——
+            // 两枚开关的形状照着 pinchen 那间房顶部的做法(图标 + 轨道)。
             <button
                 type="button"
-                class="icon-btn"
-                aria-label="切换深浅色主题"
-                title="切换深浅色主题"
-                on:click=move |_| set_theme.update(|current| *current = next_theme(*current))
+                class="switch"
+                aria-label="房间灯"
+                title="房间灯:开 / 关"
+                aria-pressed=move || if lights.get() == Lights::On { "true" } else { "false" }
+                on:click=move |_| set_lights.update(|current| *current = lights::next_lights(*current))
             >
-                <svg class="icon icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                    <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
-                    <path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"
-                          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
-                </svg>
-                <svg class="icon icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                    <path d="M20 14.6A8.6 8.6 0 0 1 9.4 4a8.6 8.6 0 1 0 10.6 10.6z"
-                          fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
-                </svg>
+                <span class="switch-face" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="15" height="15">
+                        <path
+                            d="M12 3.4a5.8 5.8 0 0 0-3.5 10.4c.5.4.8 1 .8 1.6v.4h5.4v-.4c0-.6.3-1.2.8-1.6A5.8 5.8 0 0 0 12 3.4z"
+                            fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
+                        ></path>
+                        <path d="M9.9 18.3h4.2M10.7 20.6h2.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                    </svg>
+                </span>
+                <span class="switch-rail" aria-hidden="true"><span class="switch-knob"></span></span>
+                <span class="switch-face" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="15" height="15">
+                        <path
+                            d="M12 3.4a5.8 5.8 0 0 0-3.5 10.4c.5.4.8 1 .8 1.6v.4h5.4v-.4c0-.6.3-1.2.8-1.6A5.8 5.8 0 0 0 12 3.4z"
+                            fill="currentColor"
+                        ></path>
+                        <path d="M9.9 18.3h4.2M10.7 20.6h2.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+                        <path
+                            d="M12 .8v1.7M4.8 5.1l1.2 1.2M19.2 5.1l-1.2 1.2M1.5 12h1.7M20.8 12h1.7"
+                            stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+                        ></path>
+                    </svg>
+                </span>
+            </button>
+
+            // 昼夜:站点主题就是房间的白天/黑夜,滑块在右端时是夜
+            <button
+                type="button"
+                class="switch"
+                aria-label="昼夜"
+                title="昼夜:白天 / 黑夜"
+                aria-pressed=move || if theme.get() == Theme::Dark { "true" } else { "false" }
+                on:click=move |_| set_theme.update(|current| *current = theme::next_theme(*current))
+            >
+                <span class="switch-face" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="15" height="15">
+                        <circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+                        <path
+                            d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"
+                            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                        ></path>
+                    </svg>
+                </span>
+                <span class="switch-rail" aria-hidden="true"><span class="switch-knob"></span></span>
+                <span class="switch-face" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="15" height="15">
+                        <path
+                            d="M20 14.6A8.6 8.6 0 0 1 9.4 4a8.6 8.6 0 1 0 10.6 10.6z"
+                            fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+                        ></path>
+                    </svg>
+                </span>
             </button>
         </div>
 

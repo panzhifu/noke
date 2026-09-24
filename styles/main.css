@@ -153,29 +153,74 @@ code {
   align-self: start;
 }
 
-.icon-btn {
+/* 顶栏上那两枚开关(房间灯 / 昼夜):图标 + 轨道 + 滑块,形状照着 pinchen 的房间来。
+   滑块停在哪一端就是哪个状态,两端图标始终都在 —— 不用额外标签。 */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.switch:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.switch-face {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--bg-elev);
-  color: var(--fg);
-  cursor: pointer;
-  transition: border-color 0.2s, transform 0.2s;
+  opacity: 0.4;
+  transition: opacity 0.25s var(--ease), color 0.25s var(--ease);
 }
 
-.icon-btn:hover {
-  border-color: var(--line-strong);
-  transform: translateY(-1px);
+/* 亮着/选中那一端的图标是实心的、并提到最亮 */
+.switch[aria-pressed="false"] .switch-face:first-child,
+.switch[aria-pressed="true"] .switch-face:last-child {
+  opacity: 1;
+  color: var(--accent);
 }
 
-/* 深浅色图标靠主题显隐,省掉一次重渲染 */
-html[data-theme="dark"] .icon-sun { display: block; }
-html[data-theme="dark"] .icon-moon { display: none; }
-html[data-theme="light"] .icon-sun { display: none; }
-html[data-theme="light"] .icon-moon { display: block; }
+.switch-rail {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: background 0.25s var(--ease);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.6, 1), background 0.25s var(--ease);
+}
+
+.switch[aria-pressed="true"] .switch-rail {
+  background: color-mix(in oklab, var(--accent) 34%, var(--bg-elev));
+}
+
+.switch[aria-pressed="true"] .switch-knob {
+  transform: translateX(16px);
+  background: var(--accent);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ---------- 面板:点物件后从下方浮起 ---------- */
 

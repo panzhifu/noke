@@ -36,7 +36,7 @@
   <link data-trunk rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
 
   <script>
-    // 在首帧之前定好主题,避免深色/浅色闪烁
+    // 在首帧之前定好主题与房间灯,避免深色/浅色闪烁,也避免光照状态先渲染一次再渐变
     (function () {
       try {
         var t = localStorage.getItem('noke-theme');
@@ -44,6 +44,10 @@
           t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
         }
         document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.setAttribute(
+          'data-lights',
+          localStorage.getItem('noke-lights') === 'on' ? 'on' : 'off'
+        );
       } catch (e) {}
     })();
   </script>

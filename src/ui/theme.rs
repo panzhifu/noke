@@ -66,11 +66,11 @@ fn write(theme: Theme) {
 }
 
 /// 主题:首次求值时就把 data-theme 写进 <html>,之后每次切换自动持久化。
-/// 返回写句柄即可 —— 读句柄被 Effect 持有,组件不需要再订阅一次。
-pub fn use_theme() -> WriteSignal<Theme> {
+/// 读句柄一起给出来 —— 顶栏那枚昼夜开关要拿它决定滑块位置与 aria-pressed。
+pub fn use_theme() -> (ReadSignal<Theme>, WriteSignal<Theme>) {
     let (theme, set_theme) = signal(initial_theme());
     Effect::new(move |_| write(theme.get()));
-    set_theme
+    (theme, set_theme)
 }
 
 pub fn next_theme(current: Theme) -> Theme {
