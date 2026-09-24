@@ -27,6 +27,15 @@ export async function loadModels(rig, manifest, anisotropy) {
       node.rotation.set(deg(rx), deg(ry), deg(rz));
       node.scale.setScalar(item.scale ?? 1);
 
+      // 会动的部件(冰箱门):按名字从 glb 里挑出来,点击时转它
+      let door = null;
+      if (item.door) {
+        door = node.getObjectByName(item.door) || null;
+        if (!door) console.warn(`[room3d] 清单里写了 door=${item.door},但 glb 里没有这个节点`);
+      }
+      // 可点 = 能开面板(spot) 或 能开关(door)
+      const interactive = Boolean(item.spot || door);
+
       node.traverse((child) => {
         if (!child.isMesh) return;
         meshes += 1;
@@ -40,10 +49,11 @@ export async function loadModels(rig, manifest, anisotropy) {
             texture.needsUpdate = true;
           }
         }
-        if (item.spot) {
+        if (interactive) {
           // hover 要改 emissive,材质可能是共享的 —— 先给可点的这份单独一份
           child.material = material.clone();
-          child.userData.spot = item.spot;
+          if (item.spot) child.userData.spot = item.spot;
+          if (door) child.userData.door = door;
           child.userData.baseEmissive = child.userData.baseEmissive = child.material.emissive
             ? child.material.emissive.getHex()
             : 0x000000;

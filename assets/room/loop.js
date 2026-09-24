@@ -22,13 +22,14 @@ const num = (value) => Number(value.toFixed(2));
 
 /**
  * ctx: { host, renderer, scene, camera, controls, rig, parallax, targetGoal,
- *        isReduced, pick }
+ *        isReduced, step, pick }
  *  - isReduced():这一帧该不该做视差(减弱动效偏好,由 main.js 持有)
+ *  - step(dt):光照状态的插值推进一步,返回 true 表示还在渐变中
  *  - pick():成帧之后做一次 hover 拾取,一帧最多一次
  * 返回 { invalidate, requestPick }
  */
 export function createLoop(ctx) {
-  const { host, renderer, scene, camera, controls, rig, parallax, targetGoal, isReduced, pick } = ctx;
+  const { host, renderer, scene, camera, controls, rig, parallax, targetGoal, isReduced, step, pick } = ctx;
 
   let raf = 0;
   let drawing = false;
@@ -36,12 +37,14 @@ export function createLoop(ctx) {
   let last = '';
   let pickPending = false;
   let lastDrawn = 0;
+  let lastTick = performance.now();
 
   const signature = () =>
     [
       rig.rotation.x.toFixed(5), rig.rotation.y.toFixed(5),
       camera.position.x.toFixed(4), camera.position.y.toFixed(4), camera.position.z.toFixed(4),
       controls.target.x.toFixed(4), controls.target.y.toFixed(4), controls.target.z.toFixed(4),
+      renderer.toneMappingExposure.toFixed(4),
     ].join(',');
 
   const settled = () =>
@@ -62,6 +65,7 @@ export function createLoop(ctx) {
       targetY: num(controls.target.y),
       dist: num(offset.length()),
       fov: camera.fov,
+      exposure: num(renderer.toneMappingExposure),
       calls: renderer.info.render.calls,
       tris: renderer.info.render.triangles,
     };
@@ -86,8 +90,12 @@ export function createLoop(ctx) {
       controls.target.lerp(targetGoal, TARGET_EASE);
       controls.update();
       const now = performance.now();
+      const dt = Math.min((now - lastTick) / 1000, 0.25);
+      lastTick = now;
+      // 状态插值先推进(它跟限帧无关,不然高刷屏上渐变会拖长)
+      const blending = step ? step(dt) : false;
       if (now - lastDrawn < MIN_FRAME_GAP) {
-        // 高刷屏上这一拍只推进控制与视差,不画。quiet 也不动 —— 它数的是画面。
+        // 高刷屏上这一拍只推进控制、视差与光照状态,不画。quiet 也不动 —— 它数的是画面。
         raf = requestAnimationFrame(draw);
         return;
       }
@@ -100,7 +108,7 @@ export function createLoop(ctx) {
         pick();
       }
       const sig = signature();
-      quiet = sig === last ? quiet + 1 : 0;
+      quiet = sig === last && !blending ? quiet + 1 : 0;
       last = sig;
       if (quiet < QUIET_FRAMES) {
         raf = requestAnimationFrame(draw);

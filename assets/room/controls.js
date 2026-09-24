@@ -1,5 +1,5 @@
 /**
- * 旋转控制。墙是单面片,转到墙背后会直接看穿,所以方位角/俯角都许动不许越界。
+ * 旋转控制。取景是按「从正前方看」摆的,绕到家具背后只剩背面,所以方位角/俯角都许动不许越界。
  */
 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
