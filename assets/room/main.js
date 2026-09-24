@@ -39,6 +39,9 @@ import {
   PARALLAX_YAW,
   POLAR_LIMITS,
   ROOT_ID,
+  SPIN_EASE,
+  SPIN_MAX_QUEUED_TURNS,
+  SPIN_SETTLE,
   STATE_EASE,
 } from './config.js';
 import { VARIANTS, readVariant, variant, variantKey } from './palette.js';
@@ -152,6 +155,7 @@ function start(host) {
   let walls = null;
   let lampShade = null;
   let door = null;
+  let spin = null;
   let center = new THREE.Vector3();
   let size = new THREE.Vector3(1, 1, 1);
   let framing = null;
@@ -254,6 +258,51 @@ function start(host) {
     return true;
   };
 
+  /**
+   * 转椅。点一下加一圈(清单里 `spin` 给的度数,通常就是 360),缓出停下。
+   * 转的是模型根节点的 rotation.y —— 累加在清单给的那个基准角上(`base`),
+   * 所以清单里的朝向怎么写都不影响转;原点在底盘轴心上,是原地打转不是公转。
+   * 连点不丢:目标角往后加,最多排到 SPIN_MAX_QUEUED_TURNS 圈。
+   */
+  const toggleSpin = (node, degrees) => {
+    if (!node) return;
+    const turn = deg(degrees);
+    if (!spin || spin.node !== node) {
+      spin = { node, base: node.rotation.y, angle: 0, target: 0, turns: 0, animating: false };
+    }
+    spin.target = Math.min(spin.target + turn, spin.angle + turn * SPIN_MAX_QUEUED_TURNS);
+    spin.animating = true;
+    host.dataset.spin = 'spinning';
+    frame.invalidate();
+  };
+
+  const stepSpin = (dt) => {
+    if (!spin || !spin.animating) return false;
+    const delta = spin.target - spin.angle;
+    // 落定的判据是「还在动没动」,不是「角度是否恰好相等」:帧率一低,指数逼近一步就
+    // 直接落到目标角(dt*EASE ≥ 1 时 Math.min 会取 1),angle === target 会让这段收尾
+    // 永远进不来 —— data-spin 就卡在 spinning 了(软渲染下实测过)。
+    if (Math.abs(delta) < SPIN_SETTLE) {
+      spin.animating = false;
+      // 把累计角度折回「一圈之内」,免得转几个月之后浮点精度变差
+      const full = Math.PI * 2;
+      const laps = Math.round(spin.target / full);
+      spin.turns += laps;
+      spin.angle = spin.target - laps * full;
+      spin.target = spin.angle;
+      spin.node.rotation.y = spin.base + spin.angle;
+      host.dataset.spin = 'idle';
+      host.dataset.turns = String(spin.turns);
+      renderer.shadowMap.needsUpdate = true;
+      return true;
+    }
+    spin.angle += delta * Math.min(1, dt * SPIN_EASE);
+    spin.node.rotation.y = spin.base + spin.angle;
+    // 转椅的几何真的在动,阴影贴图得跟着重画(和冰箱门一样是按需更新)
+    renderer.shadowMap.needsUpdate = true;
+    return true;
+  };
+
   const applyFog = () => {
     if (!framing) return;
     scene.fog.near = framing.fogNear;
@@ -297,7 +346,7 @@ function start(host) {
       hovered.material.emissiveIntensity = 1;
     }
     host.dataset.hover = hovered
-      ? hovered.userData.spot || (hovered.userData.door ? 'door' : '')
+      ? hovered.userData.spot || (hovered.userData.door ? 'door' : hovered.userData.spin ? 'spin' : '')
       : '';
     host.style.cursor = hovered ? 'pointer' : '';
     frame.invalidate();
@@ -323,10 +372,11 @@ function start(host) {
     targetGoal,
     isReduced: () => reduced,
     step: (dt) => {
-      // 两件事都要推:光照渐变与冰箱门(前者别把后者短路掉)
+      // 三件事都要推:光照渐变、冰箱门、转椅(别让前一个把后一个短路掉)
       const blending = stepState(dt);
       const swinging = stepDoor(dt);
-      return blending || swinging;
+      const turning = stepSpin(dt);
+      return blending || swinging || turning;
     },
     pick: () => pickAt(true),
   });
@@ -391,9 +441,13 @@ function start(host) {
     const mesh = pickAt(false);
     frame.invalidate();
     if (!mesh) return;
-    // 会动的家具(冰箱门)优先:点它是开关,不开面板
+    // 会动的家具优先:冰箱门是开关、转椅是转圈,都不开面板
     if (mesh.userData.door) {
       toggleDoor(mesh.userData.door);
+      return;
+    }
+    if (mesh.userData.spin) {
+      toggleSpin(mesh.userData.spin, mesh.userData.spinDeg);
       return;
     }
     if (!mesh.userData.spot) return;

@@ -82,8 +82,11 @@ export async function loadModels(rig, manifest, anisotropy) {
         door = node.getObjectByName(item.door) || null;
         if (!door) console.warn(`[room3d] 清单里写了 door=${item.door},但 glb 里没有这个节点`);
       }
-      // 可点 = 能开面板(spot) 或 能开关(door)
-      const interactive = Boolean(item.spot || door);
+      // 转椅:清单里给 `spin`(度)就表示「点一下转一圈」。转的是**模型根节点** ——
+      // 它的原点得落在底盘轴心上,否则转起来会绕着一根偏心的轴公转(见 tools/compress_glb.py)。
+      const spin = typeof item.spin === 'number' && item.spin !== 0 ? item.spin : 0;
+      // 可点 = 能开面板(spot) 或 能开关(door) 或 能转(spin)
+      const interactive = Boolean(item.spot || door || spin);
 
       node.traverse((child) => {
         if (!child.isMesh) return;
@@ -103,6 +106,11 @@ export async function loadModels(rig, manifest, anisotropy) {
           child.material = material.clone();
           if (item.spot) child.userData.spot = item.spot;
           if (door) child.userData.door = door;
+          // 转的是根节点(原点在底盘轴心上),所以这里存的是节点本身 + 一圈多少度
+          if (spin) {
+            child.userData.spin = node;
+            child.userData.spinDeg = spin;
+          }
           child.userData.baseEmissive = child.userData.baseEmissive = child.material.emissive
             ? child.material.emissive.getHex()
             : 0x000000;

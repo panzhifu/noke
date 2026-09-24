@@ -24,6 +24,12 @@ pub struct Model {
     /// 目前只有冰箱门（`fridge_door`）—— 几何与铰链都是从 `~/blender/fridge.blend`
     /// 自带的开门动画里定的，见 `target/tmp/export_fridge_door.py`。
     pub door: Option<&'static str>,
+    /// 点一下转多少度（转椅）。`Some(360.0)` = 点一下转一整圈，`None` = 不转。
+    ///
+    /// 转的是**模型根节点**的 Y —— 所以 glb 的原点必须落在旋转轴（底盘立柱）上，
+    /// 否则转起来会绕着一根偏心的轴公转。`tools/compress_glb.py` 的默认归一化是
+    /// 「按包围盒水平居中」，对转椅要改用「按底盘轴心居中」，见 `target/tmp/gaming_chair/pipe.py`。
+    pub spin: Option<f32>,
 }
 
 /// 目前有地毯、书桌、床、唱机和一台冰箱。
@@ -46,6 +52,7 @@ pub const MODELS: &[Model] = &[
         // 所以鼠标带动的倾斜不会让它沉到地板下面去。
         spot: None,
         door: None,
+        spin: None,
     },
     Model {
         name: "bed",
@@ -62,6 +69,7 @@ pub const MODELS: &[Model] = &[
         scale: 1.0,
         spot: Some("about"),
         door: None,
+        spin: None,
     },
     Model {
         name: "fridge",
@@ -74,6 +82,7 @@ pub const MODELS: &[Model] = &[
         // 冰箱不开面板:点它是开关门(见下面的 door 字段)。
         spot: None,
         door: Some("fridge_door"),
+        spin: None,
     },
     Model {
         name: "turntable",
@@ -90,6 +99,7 @@ pub const MODELS: &[Model] = &[
         scale: 1.0,
         spot: None,
         door: None,
+        spin: None,
     },
     Model {
         name: "desk",
@@ -104,6 +114,7 @@ pub const MODELS: &[Model] = &[
         // 点桌子开「作品」那格。
         spot: Some("work"),
         door: None,
+        spin: None,
     },
     Model {
         name: "chair",
@@ -116,9 +127,10 @@ pub const MODELS: &[Model] = &[
         // 不是从包围盒推的(两个方向都是 0.97 × 0.93,包围盒看不出正反)。
         rotation: (0.0, 180.0, 0.0),
         scale: 1.0,
-        // 纯装饰:点椅子不面板,而且它不进 pickables,不会挡在前面截走书的点击。
+        // 转椅:点一下转一圈。转的是模型根节点,原点在底盘轴心上(见 spin 字段的说明)。
         spot: None,
         door: None,
+        spin: Some(360.0),
     },
 ];
 
@@ -137,15 +149,19 @@ pub fn manifest_json() -> String {
             Some(door) => format!("\"{door}\""),
             None => "null".to_string(),
         };
+        let spin = match model.spin {
+            Some(spin) => format!("{spin}"),
+            None => "null".to_string(),
+        };
         let (px, py, pz) = model.position;
         let (rx, ry, rz) = model.rotation;
         out.push_str(&format!(
             concat!(
                 r#"{{"name":"{}","file":"{}","#,
                 r#""position":[{},{},{}],"rotation":[{},{},{}],"#,
-                r#""scale":{},"spot":{},"door":{}}}"#
+                r#""scale":{},"spot":{},"door":{},"spin":{}}}"#
             ),
-            model.name, model.file, px, py, pz, rx, ry, rz, model.scale, spot, door
+            model.name, model.file, px, py, pz, rx, ry, rz, model.scale, spot, door, spin
         ));
     }
     out.push(']');
