@@ -13,11 +13,30 @@ Three.js 随仓库一起发布,运行时不从 CDN 拉任何东西。
 
 | 已经进 3D | 点了会开面板 |
 | --- | --- |
-| 地毯、电动车、书桌、床、唱机、冰箱 —— 见 `src/room/manifest.rs` | 只有书桌(开「作品」)和床(开「关于」) |
+| 地毯(铺在书桌下)、书桌、床、唱机、冰箱,外加一间「墙角 + 地板」的舞台与一盏台灯 —— 见 `src/room/manifest.rs` | 书桌(开「作品」)和床(开「关于」) |
+
+**冰箱门可以点开**:那台冰箱的 glb 里,门是一个独立节点,点它会摆开 / 合上(默认关着,
+缓出动画)。门开到底 89.888°、铰链在前右竖边 —— 这两个数不是估的,是从 `~/blender/fridge.blend`
+自带的「开门 → 关门」骨骼动画里反解出来的,解算与导出见 `target/tmp/export_fridge_door.py`。
 
 剩下三格(手记 / 联系 / 海报)靠面板头部的左右箭头到达;键盘 Tab 则从 `sr-only` 的入口条进。
 页面上没有可见文字,所以**没有「搬完家具就删掉的临时按钮」这回事了** —— 入口条是长期给键盘和读屏留的通道。
-墙上的海报位还是空的:那一格目前是面板里的两张迷你占版式。
+
+## 光照的四个状态
+
+顶栏是两枚药丸开关:**房间灯**(书桌上那盏台灯)与**昼夜**(就是站点的深浅色主题)。
+两维相乘即四态,颜色与强度全在 `assets/room/palette.js` 一张表里:
+
+| | 灯关 | 灯开 |
+| --- | --- | --- |
+| 白天 | 天光为主,暖白、影子硬 | 灯罩亮起,灯下多一圈暖光 |
+| 夜里 | 冷月光,低照度 | 环境压到最低,只留灯下那团暖光 |
+
+状态切换是**渐变**不是硬切:3D 层每帧把颜色与强度往目标态插(缓出曲线),`toneMappingExposure`
+也一起插;插值没走完时按需渲染的循环不许停摆,否则画面会定在渐变半路。
+
+做法参考了 [pinchen.me](https://pinchen.me/) 那间房(它顶栏也是这两枚开关、四态也是这么分的)。
+它那边光照是**烘焙进贴图**的(每态一整套 webp),这边全靠实时灯 —— 表里的 lamp 强度因此给得比它重。
 
 ## 本地开发
 
@@ -71,8 +90,10 @@ trunk build --release              # 产物在 dist/
 全部文案都在 [`src/content.rs`](src/content.rs)。标了 `TODO` 的地方是留的占位。
 
 - 配色 / 字号:`styles/main.css` 顶部两个 `[data-theme]` 块。
-  3D 层跟着这两个主题走 —— `assets/room/palette.js` 读 `data-theme`,
-  得出背景 / 地板 / 四盏灯的颜色,切主题时不用改它。
+  3D 层跟着这两个主题走,再加一枚 `data-lights`(房间灯) —— 两者都由
+  `assets/room/palette.js` 合成状态键(`off-day` / `on-day` / `off-night` / `on-night`),
+  四态的背景 / 墙地 / 五盏灯的颜色与强度都写在那张表里,调光只翻这一个文件。
+  开关在 `src/lib.rs` 的顶栏,状态由 `src/ui/theme.rs` 与 `src/ui/lights.rs` 写进 `<html>`。
 - 面板:五格内容常驻 DOM,靠 `.pane-off` 显隐,切换时不重建(`src/ui/panel.rs`)。
 - **页面上没有可见文字**:名字和标语在 `h1.sr-only` 与 meta 里;入口条(`src/ui/entries.rs`)
   整条 `sr-only`,只有键盘 Tab 进来才显形;面板头部是图标 —— 左右箭头遍历五格,× 关闭。
@@ -122,9 +143,10 @@ src/
   hooks.rs      Esc / 复制邮箱 / 3D 拾取事件
 assets/
   room/         Three.js 渲染层,按职责分文件:
-                config(常量) / palette(色板) / manifest(清单) / scene(灯光与墙地) /
-                framing(取景) / models(glb) / controls(旋转钳位) / loop(按需渲染) /
-                main(编排、事件、拾取、启动)
+                config(常量) / palette(四态光照表) / manifest(清单) /
+                scene(灯光组、墙地、台灯) / framing(取景) / models(glb) /
+                controls(旋转钳位) / loop(按需渲染) /
+                main(编排、事件、光照插值、拾取、启动)
   models/       glb
   vendor/       Three.js
 styles/
@@ -175,24 +197,38 @@ python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:80
 
 ## 已验证
 
-`cargo clippy` / `cargo fmt --check` 零警告。
-
-## 已验证
-
 `cargo clippy --all-targets` 零告警,`cargo fmt --check` 通过。
 
 构建管线:`trunk build --release --public-url /noke/` 之后 `dist/assets/` 下 glb、Three.js、
 `assets/room/*.js` 都在位;`index.html` 里 importmap 排在 Trunk 注入的 wasm 加载脚本之前。
 
-**用 Edge(Chromium 151) 真机跑过** —— SwiftShader 软件渲染,视口 1440×900:
+**每次改完 3D 层都在 Edge(Chromium,SwiftShader 软渲染)里出图核对**,视口 1440×900 ——
+`target/tmp/` 里留了几个脚本:`verify_room.py`(起没起得来)、`shoot_states.py`(四态各一张,
+顺带核对属性与开关的 aria)、`verify_orbit.py`(轨道四角 + 拾取区域扫描)、
+`patch_preview.py` + `shoot_angles.py`(给预览副本打「URL 参数定机位」的补丁,按固定角度复现)。
 
-- `#room3d` 拿到清单,`carpet.glb` 加载成功,canvas 落地 1440×900,WebGL 2.0 上下文正常
-- 地毯的编织贴图、透视、光照、地板对比都正常
-- 无 JS 报错
-- WebGL 拿不到时整层跳过并派发 `noke:room-ready`,页面不白屏 ——
-  这条在 Firefox 无头下实测过(它 `webgl`/`webgl2` 都是 no),DOM 入口照常可用
+再一轮(冰箱门 / 换唱机 / 压缩工具修复)之后的结果:
 
-首屏 gzip 约 316 KB(Three.js 占 195 KB);地毯 glb 557 KB,里面已经是 JPEG 所以 gzip 压不动。
+- 冰箱:`meshes 11`、`pickable 9`,点冰箱 → `dataset.door` 在 `open` / `closed` 之间来回;
+  默认 `closed`(刷回初始态也是关着的),开门动画走 `stepDoor` 的缓出,阴影跟着重画
+- 唱机:换成本地重新压的 Yamaha TT-300(2.5 万面 / 1024² 贴图 / WebP 90,1.33 MB),
+  之前那版是倒扣的,现在正立、细节清楚
+- 静态资源:冰箱 548 KB、唱机 1.33 MB;`assets/models/` 下不再有电动车
+
+上上轮(墙角舞台 + 四态光照 + 台灯 + 新机位)的结果:
+
+- `stats` 报 `models: [carpet, bed, fridge, turntable, desk]`、`lights: 5`、`walls: 2`、
+  `fov: 35`、`pitchDeg: 16`、`azimuthDeg: 30`、`polarLimits: [48, 88]`、`azimuthLimits: [0, 62]`
+- 四态各一张图,`dataset.view` 里的 `exposure` 随态变化(1 / 0.95 / 0.8 / 0.88)——
+  插值确实在跑,不是硬切
+- 开灯/切昼夜后 `localStorage` 与重载后的状态一致,两枚开关的 `aria-pressed` 同步
+- 方位角 0 / 44 / 62 × 俯角 48 / 88 四种极端角度都不切家具、画面顶永远是墙
+- 点书桌 → `focused=work`、面板打开;点床 → `focused=about`
+- 无 JS 报错;WebGL 拿不到时整层跳过并派发 `noke:room-ready`,页面不白屏
+  (这条之前用 Firefox 无头验过,它 `webgl`/`webgl2` 都是 no)
+
+首屏 gzip 约 313 KB(Three.js 那五个文件占 225 KB);
+模型:床 808 KB / 唱机 702 KB / 冰箱 407 KB / 地毯 78 KB / 书桌 16 KB(gzip 都压不动,里面已经是 WebP)。
 
 ### 踩过的坑
 
@@ -211,3 +247,38 @@ python3 -m http.server -d target/tmp/preview 8000   # 打开 http://localhost:80
   同理,页面上任何一个 `z-index:2` 的透明盒子摊开铺满视口,房间中间也就拖不动了
   (顶栏因此要 `align-self: start`,别让 grid 的 stretch 把它拉成满屏)。
   核对方法:`document.elementFromPoint(房间中央)` 应当返回 `CANVAS`。
+- 🔴 **贴着地面的东西必须和地板同组**:视差的俯仰是 `rig.rotation.x` 绕原点转整组,
+  幅度约 ±1°。只离地 2mm 的地毯要是在场景根上、地板在组里(或反过来),转过一侧
+  就会被地板整条盖掉 —— 表现是「转动视角时地毯缺一块」。现在地板 `rig.add(floor)`、
+  模型也都在 rig 里,没有相对位移;地毯自己再抬到 4mm 当绒高,双保险。
+- **取景靠 `fitCamera`,尺寸变化不用手调**:相机距离、雾的近远端、阴影相机范围都是按
+  场景包围盒算的。删掉电动车、把地毯从 3.48m 收到 2.53m 之后,构图自己跟着收紧了。
+- 🔴 **取景必须按方位角投影包围盒**。`fitCamera` 早先只拿 `size.x` 当画面宽度,等于假设
+  镜头正对场景;初始方位角一给到 30°,场景在画面上的投影宽度就涨到接近对角线,
+  近的那件家具(床)直接被切在画框外。现在把包围盒投到相机自己的 right/up/前向三个轴上算,
+  并且**固定用初始方位角那 30°** ——包围盒 4.76 宽 × 3.4 深时投影宽度恰好在 30°~40° 最大,
+  拿这个「最坏角度」定距离,整段方位角范围内都不会被切,resize 也不会改构图。
+- 🔴 **光照渐变没走完时,按需渲染的循环不许停摆**。`loop.js` 靠「连续 6 帧画面签名不变」
+  判定可以停 rAF;而光照插值不改镜头也不改 `rig.rotation`,签名自然不变 ——
+  中间几版就是插到一半画面定住。现在给循环加了个 `step(dt)` 钩子,它返回 true 时 `quiet` 归零,
+  同时把 `toneMappingExposure` 加进签名。
+- **墙角是两块「景片」,不是一间封闭的屋子**:高度要够到「俯角 16° 时上边缘出画」
+  (现在 5.6m,给拉远留了余量),否则画面顶上会露出背景;宽 2.6×跨度。它们和地板一样
+  必须挂在视差组里,否则俯仰一转,墙脚与地板之间会裂出缝。
+- 🔴 **会动的部件要单独成一个节点,原点落在铰链上**。冰箱门就是这么导的(见
+  `target/tmp/export_fridge_door.py`):把门从箱体里留出来、其余 join 成 `fridge_body`,
+  门的几何烘成「关着」的姿态、节点原点搬到铰链 —— 网页那边只要转它自己的 `rotation.y`。
+  铰链与角度**从原件的动画里反解**(取开门帧与关门帧的相对变换 R,解 `(I - R)p = t` 得铰链点),
+  别手算:写成 `R - I` 会把铰链解成它的相反数,差一个负号,门就绕着另一条边转。
+- 🔴 **`tools/compress_glb.py` 修过两处,都是「模型出来不对」的根因**:
+  ①解父链要用 `CLEAR_KEEP_TRANSFORM` 而不是 `CLEAR` —— glTF 导入时那层根节点的
+  Y-up→Z-up 旋转也在父变换里,`CLEAR` 会连它一起丢掉,几何躺倒,后面的 `up_fix` 再盲目补
+  +90°,两者一正一负就翻成 180°(唱机当初就是这么被压成倒扣的);
+  ②保留变换会把根节点的缩放(常常是 ×100)带下来,而 `unit_scale` 是**赋值**不是**相乘**,
+  不先烘焙一次的话 42.7cm 会再被缩 100 倍成 4mm。
+- **算包围盒别读缓存**:`bound_box` 与 `matrix_world` 都是缓存,改完数据/位置不调
+  `bpy.context.view_layer.update()` 读到的还是旧值 —— 冰箱门那次「水平居中」就是因此
+  把已经摆好的门又挪了 33cm,门跑到箱体里去了。按顶点现算最稳。
+- **台灯的强度不能照抄 pinchen 的数**:那边场景一单位≈这边 0.1 米,它的 `lamp: 24` 换到
+  米制大概是 0.2~1.6 这个量级(聚光衰减是 `decay: 2`,照度按 1/d² 掉)。直接抄 24 的话
+  桌面会被烧成一片白。
