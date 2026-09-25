@@ -68,7 +68,7 @@
 <body>
   <!--
     加载界面:一扇正在慢慢开的门。开的角度就是进度,门缝里透出来的是屋里的暖光。
-    撤掉它的是 <html data-phase>(assets/room/gate.js 写):门厅那一格画成、或者 3D 起不来,都算有阶段了。
+    撤掉它的是 <html data-phase>(assets/room/gate.js 写):首屏画成、或者 3D 起不来,都算有阶段了。
   -->
   <div class="gate" role="progressbar" aria-label="正在载入房间" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
     <span class="gate-door" aria-hidden="true">
@@ -78,10 +78,10 @@
     <span class="gate-rail" aria-hidden="true"><span class="gate-fill"></span></span>
   </div>
 
-  <!-- 门厅阶段:剩下的家具还在后台补,这条发丝线是唯一的提示 -->
-  <div class="porch-line" aria-hidden="true"><span class="porch-fill"></span></div>
+  <!-- 首屏阶段:屋里那 11 件还在后台补,底部这条线是唯一的提示 -->
+  <div class="landing-line" aria-hidden="true"><span class="landing-fill"></span></div>
 
-  <!-- 进门的转场:不透明度跟着补间走(见 porch.js 的 createWalkIn) -->
+  <!-- 进门的转场:不透明度跟着补间走(见 landing.js 的 createWalkIn) -->
   <div class="curtain" aria-hidden="true"></div>
 
   <noscript>

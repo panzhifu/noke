@@ -132,7 +132,7 @@ code {
 /* ---------- 加载界面:一扇正在打开的门 ----------
    进度不是转圈,是门开多少:--p(0→1)由 assets/room/gate.js 按门那只 glb 的
    真实字节数写进来,门缝里透出的暖光也是同一个数。
-   撤掉它的条件是 <html> 上出现了 data-phase —— 门厅画成(porch)或 3D 这层起不来(page)。 */
+   撤掉它的条件是 <html> 上出现了 data-phase —— 首屏画成(landing)或 3D 这层起不来(page)。 */
 
 .gate {
   position: fixed;

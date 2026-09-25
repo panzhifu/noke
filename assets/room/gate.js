@@ -1,5 +1,5 @@
 /**
- * 页面最外层的 DOM:加载界面、门厅那条进度发丝线、进门时那块幕。
+ * 页面最外层的 DOM:加载界面、首屏那条进度线、进门时那块幕。
  *
  * 这三样都写在 index.html 里(不在 Leptos 的视图里),因为它们要管的是「App 还没挂上」
  * 和「three.js 还没就绪」那两段时间。这一层只做一件事:把 JS 算出来的数字翻译成
@@ -7,13 +7,13 @@
  *
  * 阶段(data-phase):
  *   空      还在下载门 —— 加载界面占屏
- *   porch   门厅:首屏只有那扇门,其余家具在后台补
+ *   landing   首屏:画面正中一扇关着的门,屋里的家具还在后台补
  *   walking 推门而入的补间中
  *   room    已经站在屋里
  *   page    3D 这层起不来(WebGL / 解码 / 超时),退回纯 DOM 页面
  */
 
-const PHASES = ['porch', 'walking', 'room', 'page'];
+const PHASES = ['landing', 'walking', 'room', 'page'];
 
 /** 写自定义属性:变化不足半个百分点就跳过 —— 下载进度是按 chunk 来的,能刷上百次。 */
 function setFraction(el, name, value, now) {
@@ -28,7 +28,7 @@ export function createGate(root = document.documentElement) {
   // 认类名不认 id:这三样在 index.html 里就是靠这几个类和样式绑在一起的,少一份要对齐的名单
   const doc = root.ownerDocument;
   const gate = doc.querySelector('.gate');
-  const line = doc.querySelector('.porch-line');
+  const line = doc.querySelector('.landing-line');
   const curtain = doc.querySelector('.curtain');
 
   let phase = '';
@@ -50,7 +50,7 @@ export function createGate(root = document.documentElement) {
       });
     },
 
-    /** 其余家具的进度(件数)。门厅阶段只体现在那条发丝线上。 */
+    /** 屋里那 11 件的进度(按件数)。首屏那一格里只体现在底部那条线上。 */
     roomProgress(fraction) {
       if (line) setFraction(line, 'p', fraction);
     },

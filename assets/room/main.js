@@ -11,14 +11,14 @@
  * 光照有四个状态(日/夜 × 灯关/灯开),它们的差别全在 palette.js 那张表里:
  * 这一层只负责把当前这组颜色与强度逐帧推向目标态 —— 所以「开灯」是渐亮,不是硬切。
  *
- * 点中一件会开面板的家具顺带拉近:focusOn 把注视点挪过去、再写一个目标半径给 loop.js
- * 逐帧推(半径按物品自己的包围盒算,见 framing.js 的 fitDistance)。收面板放回、
+ * 点中一件会开面板的家具顺带拉近:focusOn 把注视点挪过去,再写一个目标半径给 loop.js
+ * 逐帧推过去(半径按这件东西自己的包围盒算,见 framing.js 的 fitDistance)。收面板时放回、
  * 滚轮一动就作废。
  *
- * 整层是一个阶段状态机(下面的 `phase`),首屏不是「屋子正在加载」而是「门前」:
- *   boot     只有门在下载(428 KB),屏幕上是一扇正在开的门 + 进度
- *   porch    门厅:首屏就是那扇关着的门;其余 11.6 MB 在后台并发补,补进来先藏着
- *   walking  点了门:走到门口 → 幕 → 换景 → 退到定位镜头(见 porch.js)
+ * 整层是一个阶段状态机(下面的 `phase`),首屏不是「屋子正在加载」而是「一扇门」:
+ *   boot     只有门在下载(428 KB),屏幕上是一扇正在开的门图标 + 进度
+ *   landing  首屏:画面正中一扇关着的门,背后只有背景色;屋里的 11.6 MB 在后台并发补,先藏着
+ *   walking  点了门:推到门框前 → 幕 → 换景 → 退到定位镜头(见 landing.js)
  *   room     已经站在屋里,也就是这一层原本的样子
  *   page     3D 这层起不来(WebGL 拿不到 / 装配炸了),退回纯 DOM 页面
  *
@@ -26,13 +26,13 @@
  *   config.js    数值常量与 deg()
  *   palette.js   四个光照状态的颜色/强度表,以及 data-theme + data-lights 的读法
  *   manifest.js  读 #room3d 上的模型清单、把相对路径解析成 URL
- *   scene.js     灯光组、景片(地板 + 墙角 + 暗腔)、按包围盒挪灯
+ *   scene.js     灯光组、景片(地板 + 两面墙)、按包围盒挪灯
  *   framing.js   按包围盒算取景距离与雾的近远端、按球坐标摆位姿
- *   porch.js     门厅那一格、门口那一格,以及两段之间的补间与幕
+ *   landing.js   首屏那一格、门框前那一格,以及两段之间的补间与幕
  *   models.js    加载 glb(单件 / 并发一批 / 预热),挑出可点的网格
  *   controls.js  OrbitControls 的角度钳位
  *   loop.js      按需渲染的帧循环(限帧、静置停摆、镜头读数)
- *   gate.js      加载界面、门厅那条进度发丝线、进门时那块幕
+ *   gate.js      加载界面、首屏那条进度线、进门时那块幕
  *   main.js      这一份:把上面这些接到一起,管渲染器、阶段、事件、光照状态与拾取
  */
 
@@ -44,12 +44,11 @@ import {
   CAMERA_FOV,
   DISTANCE_RANGE,
   DOOR_EASE,
-  DOOR_RECESS_DARK,
   DRAG_THRESHOLD,
   ENTER_HOLD,
   ENTER_MS,
   ENTER_REVEAL,
-  ENTRY_NAME,
+  ENTRY,
   LAMP_BULB_MATERIAL,
   MAX_DPR,
   PARALLAX_PITCH,
@@ -71,7 +70,7 @@ import { buildStage, createScene, findLampBulb, fitRig } from './scene.js';
 import { deg } from './config.js';
 import { CAMERA_PITCH, fitCamera, fitDistance } from './framing.js';
 import { createModelLoader } from './models.js';
-import { applyPose, createWalkIn, porchPose, roomPose } from './porch.js';
+import { applyPose, createWalkIn, landingPose, roomPose } from './landing.js';
 import { createGate } from './gate.js';
 import { createControls } from './controls.js';
 import { createLoop } from './loop.js';
@@ -143,7 +142,7 @@ function idle(task) {
 function start(host) {
   const manifest = readManifest(host);
   const gate = createGate();
-  // 整层是一个阶段状态机(boot / porch / walking / room / page),文件头那张表是它的说明
+  // 整层是一个阶段状态机(boot / landing / walking / room / page),文件头那张表是它的说明
   let phase = 'boot';
 
   /**
@@ -194,7 +193,7 @@ function start(host) {
   const rig = new THREE.Group();
   scene.add(rig);
   const controls = createControls(camera, renderer.domElement);
-  // 门厅期间镜头是摆好的,不许拖:能拖就等于承认这里已经是一间屋子了
+  // 首屏那一格镜头是摆好的,不许拖:能拖就等于承认这里已经是一间屋子了
   controls.enabled = false;
 
   const raycaster = new THREE.Raycaster();
@@ -203,13 +202,13 @@ function start(host) {
 
   // ---------- 阶段手里的那些东西 ----------
   let models = null;
-  // 门以外的那些:边下边藏起来(visible=false),门厅里只看得见门和它所在的墙
+  // 屋里那 11 件:边下边藏起来(visible=false),首屏那一格里只该有门
   let furniture = [];
-  // 两套景片:门厅那套按门的包围盒铺,屋里那套按家具的包围盒铺(建好先藏着,换景靠那块幕盖住)
-  let porchStage = null;
+  // 首屏那件东西(门)与屋里的景片:进屋就是这两者的可见性对调一次,换的那一帧由幕盖住
+  let landingDoor = null;
+  let landingBox = null;
   let roomStage = null;
   let stages = [];
-  let doorBox = null;
   let platter = null;
   // 唱盘那一圈角速度(弧度/秒)
   const platterOmega = (PLATTER_RPM * Math.PI * 2) / 60;
@@ -222,8 +221,8 @@ function start(host) {
   let center = new THREE.Vector3();
   let size = new THREE.Vector3(1, 1, 1);
   let framing = null;
-  // 两档位姿:门厅(点门的起点)与屋里(补间的终点)
-  let porch = null;
+  // 两格位姿:首屏(点门的起点)与屋里定位(补间的终点)
+  let landing = null;
   let room = null;
   let walk = null;
   // 家具齐了 + 预热完了才算「能进」;在那之前点了门只是先把门打开
@@ -243,7 +242,7 @@ function start(host) {
   const radiusGoal = { value: null };
   // applyPose 一次要写三样:相机、OrbitControls 的注视点、还有 loop.js 每帧去追的那个目标
   const poseCtx = { controls, fog: scene.fog, targetGoal };
-  // 门厅阶段只有那扇门能点,进了屋才是全部
+  // 首屏那一格只有门能点,进了屋才是全部
   let pickList = [];
 
   /** 把 current 这组值灌进场景。颜色全部新建对象,免得几处共用一个 Color 互相改。 */
@@ -263,15 +262,10 @@ function start(host) {
     lights.lamp.color = new THREE.Color(current.lamp);
     lights.lamp.intensity = current.lampIntensity;
     if (lampBulb) lampBulb.emissive = new THREE.Color(current.lampEmissive);
-    // 两套景片都活着(换景靠那块幕盖住),所以两套都得跟着状态走
     for (const stage of stages) {
       stage.floor.material.color = new THREE.Color(current.floor);
       stage.walls.back.material.color = new THREE.Color(current.wallBack);
       stage.walls.side.material.color = new THREE.Color(current.wallSide);
-      // 暗腔也跟着状态走(它不受光,明暗全靠这个系数)
-      if (stage.walls.recess) {
-        stage.walls.recess.material.color = new THREE.Color(current.wallBack).multiplyScalar(DOOR_RECESS_DARK);
-      }
     }
   };
 
@@ -398,7 +392,7 @@ function start(host) {
    * 「什么时候转」交给房间灯那枚开关,是因为这个循环是**按需渲染**的 —— 唱盘常转就等于
    * 帧循环永不停摆;挂在灯上,关灯静置照样停摆,省电那条还剩一半。
    * 阴影贴图不跟着重画:盘是圆的,转起来投影没变(盘面上那圈标签跟着转,但它是平的)。
-   * 还要求已经在屋里:门厅阶段唱机藏着呢,让它继续报「还在动」就是白白吊着帧循环。
+   * 还要求已经在屋里:首屏那一段时间唱机还藏着,让它继续报「还在动」就是白白吊着帧循环。
    */
   const stepPlatter = (dt) => {
     if (!platter || phase !== 'room') return false;
@@ -459,24 +453,25 @@ function start(host) {
 
   /**
    * 按当前阶段重新摆镜头。resize 只该改「装得下」,不该改构图:
-   * 屋里保住用户已经转到的角度(只跟着改半径),门厅重新贴着门摆一次。
-   * 走位途中不用管:那期间每帧都由补间写镜头,aspect 在 applyPose 里跟着改。
+   * 屋里保住用户已经转到的角度(只跟着改半径),首屏重新贴着门摆一次。
+   * 走位途中直接跳过:那期间每一帧都由补间写镜头,aspect 在 applyPose 里跟着改。
    */
   const layoutPose = () => {
+    if (phase === 'walking') return;
     if (phase === 'room') {
       framing = fitCamera(camera, host, center, size, framingAzimuth());
       applyFog();
       refit();
       return;
     }
-    if (!doorBox) return;
+    if (!landingBox) return;
     // 屋里的定位镜头跟着窗口重算一份:可能已经装配完了,只是人还没进门
     if (framing) {
       framing = fitCamera(camera, host, center, size, framingAzimuth());
       room = roomPose(framing);
     }
-    porch = porchPose(camera, host, doorBox);
-    applyPose(camera, host, porch, poseCtx);
+    landing = landingPose(camera, host, landingBox);
+    applyPose(camera, host, landing, poseCtx);
   };
 
   const setHovered = (mesh) => {
@@ -536,12 +531,12 @@ function start(host) {
   };
 
   /**
-   * 换景:门厅那套景片退场、按真包围盒建的屋里那套上场、家具显形、台灯归位。
-   * 只在补间里幕全黑的那一帧调一次,所以谁都看不见这里换了什么。
+   * 换景:首屏那扇门退场,屋里的景片与家具一起显形,台灯那盏聚光归位。
+   * 整个过程只在补间里幕全黑的那一帧发生一次,所以谁都看不见这里换了什么。
    */
   const revealRoom = () => {
+    if (landingDoor) landingDoor.visible = false;
     for (const node of furniture) node.visible = true;
-    if (porchStage) porchStage.group.visible = false;
     if (roomStage) roomStage.group.visible = true;
     lights.lamp.visible = true;
     pickList = pickables;
@@ -564,7 +559,7 @@ function start(host) {
   };
 
   const beginWalk = () => {
-    if (!porch || !room) return;
+    if (!landing || !room) return;
     phase = 'walking';
     gate.setPhase('walking');
     host.dataset.phase = 'walking';
@@ -573,7 +568,7 @@ function start(host) {
     parallax.tx = 0;
     parallax.ty = 0;
     walk = createWalkIn({
-      from: porch,
+      from: landing,
       to: room,
       duration: ENTER_MS,
       revealAt: ENTER_REVEAL,
@@ -593,7 +588,7 @@ function start(host) {
    * 后台补齐 + 预热一完成就自己接上走位。
    */
   const enterRoom = () => {
-    if (phase !== 'porch') return;
+    if (phase !== 'landing') return;
     if (!roomReady) {
       pendingEnter = true;
       return;
@@ -650,7 +645,7 @@ function start(host) {
     if (mesh.userData.door) {
       toggleDoor(mesh.userData.door);
       // 首屏那扇门顺带是入口:开它的同时推门进去
-      if (mesh.userData.owner === ENTRY_NAME) enterRoom();
+      if (mesh.userData.owner === ENTRY.name) enterRoom();
       return;
     }
     if (mesh.userData.spin) {
@@ -664,7 +659,7 @@ function start(host) {
 
   /**
    * 点中一件家具:注视点挪过去 + 按这件东西自己的个头拉近。
-   * 拉近的量走 fitDistance(和门厅同一条式子,ZOOM_FILL 决定它占画面多大),再夹在
+   * 拉近的量走 fitDistance(和量门用的是同一条式子,ZOOM_FILL 决定它占画面多大),再夹在
    * 「滚轮本来就推得到的最近处」与定位距离之间 —— 于是点床只是凑近一点,点键盘才会真的贴脸,
    * 而且不用临时去放宽 OrbitControls 的钳位(放开了就得记得改回来,那笔账最容易漏)。
    * 镜头位置本身还是 OrbitControls 在管,这里只给目标,不去抢。
@@ -760,16 +755,19 @@ function start(host) {
     variants: Object.keys(VARIANTS),
     // 清单里那些「能开关的部件」:名字 = 节点:轴@角度 —— 用来核对轴与角度真的跟着模型走
     // (以前这里是一个全局 doorOpenDeg,第二扇门一接上就露馅)
-    doors: manifest
-      .filter((item) => item.door)
-      .map((item) => `${item.name}=${item.door.node}:${item.door.axis}@${item.door.deg}`),
+    // 首屏那扇门也算一扇,所以它排在最前面
+    doors: [`${ENTRY.name}=${ENTRY.door.node}:${ENTRY.door.axis}@${ENTRY.door.deg}`].concat(
+      manifest
+        .filter((item) => item.door)
+        .map((item) => `${item.name}=${item.door.node}:${item.door.axis}@${item.door.deg}`)
+    ),
     stateEase: STATE_EASE,
     demandRendering: true,
     // 装配完立刻的累计帧数:证明 boot 阶段没有连画一堆帧(静置后是否真停下,
     // 得在可见窗口的 devtools 里看 dataset.frames 会不会一直涨)
     frameAtBoot: renderer.info.render.frame,
-    // 门厅那一格离门多远(米):核对首屏构图 —— 门要完整入画又不能太小
-    porchMeters: porch ? Number(porch.position.distanceTo(porch.target).toFixed(2)) : null,
+    // 首屏那一格离门多远(米):核对构图 —— 门要完整入画又不能太小
+    landingMeters: landing ? Number(landing.position.distanceTo(landing.target).toFixed(2)) : null,
     enterMs: ENTER_MS,
     revealAt: ENTER_REVEAL,
     anisotropy,
@@ -780,45 +778,39 @@ function start(host) {
   });
 
   /**
-   * 门厅:首屏那一格。只用手头有的那一件 —— 门 —— 把门前这一小段铺出来。
+   * 首屏那一格:只有门,摆在画面正中,背后就是背景色。
    *
-   * 景片是「中心 + 包围盒 + WALL_PAD」倒推墙面的,而这里没有整间屋子,只有门:
-   * 所以把门的原点当成那间还不存在的屋子的中心。清单里门的 z 本来就是照背墙调的
-   * (现在写的 -3.01 和装配完量出来的 backZ 是同一个数),这样门厅那堵墙正好落在门上。
+   * 三步:把门的包围盒中心挪到世界原点(它因此正好在画框中心,视差那点俯仰也是绕它转的)、
+   * 按门自己的尺寸摆镜头、**给渲染器定尺寸**。最后这条别省:画布默认 300×150,而 CSS 把
+   * 画布拉满全屏 —— 不 setSize 出来的就是一屏糊的东西。
    */
-  const buildPorch = (doorNode) => {
+  const buildLanding = (doorNode) => {
     rig.updateMatrixWorld(true);
-    doorBox = new THREE.Box3().setFromObject(doorNode);
-
-    porch = porchPose(camera, host, doorBox);
-    const porchSize = doorBox.getSize(new THREE.Vector3());
-    const porchCenter = doorBox.getCenter(new THREE.Vector3());
-    porchCenter.z += porchSize.z / 2 + WALL_PAD;
-    // 地板铺到雾之外就够了:边缘本来就化进背景,看不见
-    porchStage = buildStage(current, porchSize, porchCenter, porch.fogFar * 0.75, doorBox);
-    rig.add(porchStage.group);
-    stages = [porchStage];
-    // 灯与阴影相机按门这一小段量一次:三盏光都是平行的,只有方向要紧(见 fitRig)
-    fitRig(lights, lights.focus, [doorNode]);
-    // 台灯那盏聚光照的是书桌,而书桌还没来 —— 先关掉,免得门厅地板上出现一圈没有来处的暖光。
-    // 它的位置等装配时按灯泡归位。
+    const middle = new THREE.Box3().setFromObject(doorNode).getCenter(new THREE.Vector3());
+    doorNode.position.sub(middle);
+    rig.updateMatrixWorld(true);
+    landingBox = new THREE.Box3().setFromObject(doorNode);
+    landingDoor = doorNode;
+    // 台灯那盏聚光照的是书桌,而书桌还没来;首屏也没有地面能接住这圈光
     lights.lamp.visible = false;
-    applyPose(camera, host, porch, poseCtx);
+    // 灯与阴影相机先按门这一小段量一次:三盏光都是平行的,只有方向要紧(见 fitRig)
+    fitRig(lights, lights.focus, [doorNode]);
     syncScene();
+    resize();
     renderer.compile(scene, camera);
-    pickList = models.stats().pickables.filter((mesh) => mesh.userData.owner === ENTRY_NAME);
+    pickList = models.stats().pickables.filter((mesh) => mesh.userData.owner === ENTRY.name);
 
-    phase = 'porch';
-    gate.setPhase('porch');
+    phase = 'landing';
+    gate.setPhase('landing');
     gate.bootProgress(1);
-    host.dataset.phase = 'porch';
+    host.dataset.phase = 'landing';
     frame.invalidate();
   };
 
   /**
-   * 家具齐了之后把屋里那一格搭出来:量包围盒 → 按真值建景片 → 墙上那几件贴墙 →
-   * 台灯与唱盘从模型里认出来 → 算好定位镜头。
-   * 门厅还占着画面,所以整个过程不碰镜头,只把 `room` 那一格算出来等着。
+   * 家具齐了之后把屋里那一格搭出来:量包围盒 → 建景片 → 挂墙的贴墙 → 台灯与唱盘从模型里
+   * 认出来 → 算好定位镜头。
+   * 首屏还占着画面,所以整个过程不碰镜头,只把 `room` 那一格算出来等着。
    */
   const assembleRoom = () => {
     const assembled = models.stats();
@@ -830,9 +822,9 @@ function start(host) {
       return false;
     }
 
-    // 嵌在墙上的那几件先摘出去再量:墙的位置就是从这个盒子推出来的,算进去等于把墙
-    // 自己推远,而且这个反馈没有不动点(见 manifest.rs 的 wall 字段)
-    const measured = rig.children.filter((node) => node !== porchStage?.group && !node.userData.wall);
+    // 嵌在墙上的那几件(墙上当封面的黑胶)不参与取景:墙的位置就是从这个盒子推出来的,
+    // 算进去等于把墙自己推远,而且这个反馈没有不动点(见 manifest.rs 的 wall 字段)
+    const measured = furniture.filter((node) => !node.userData.wall);
     const fitted = fitRig(lights, lights.focus, measured);
     center = fitted.center;
     size = fitted.size;
@@ -859,13 +851,12 @@ function start(host) {
     platter = rig.getObjectByName('platter') || null;
     if (!platter) console.warn('[room3d] 唱机里没有 platter 节点,唱盘不会转');
 
-    // 屋里那套景片:墙按真包围盒建,门洞直接抄门的包围盒(每边让门框压住洞口 8mm 那套
-    // 已经在 createWalls 里了)。建好先藏着,等幕全黑那一拍换。
-    roomStage = buildStage(current, size, center, Math.max(size.x, size.z), doorBox);
+    // 屋里的景片:地板 + 两面墙,尺寸全从家具包围盒倒推。建好先藏着,等换景那一帧开出来。
+    roomStage = buildStage(current, size, center, Math.max(size.x, size.z));
     rig.add(roomStage.group);
     roomStage.group.visible = false;
-    stages = [porchStage, roomStage].filter(Boolean);
-    // 挂在背墙上的家具(门、墙上当封面的那张黑胶)统一贴到墙面上。
+    stages = [roomStage];
+    // 挂在背墙上的家具(墙上当封面的那张黑胶)统一贴到墙面上。
     // 离墙 3mm:它们自己的网格和墙是两套网格,共面的那条边会打架(z-fighting)。
     // 清单里写的那个 z 只是给 devtools 看着方便,真正贴上去靠这一行。
     for (const node of rig.children) {
@@ -889,29 +880,21 @@ function start(host) {
 
   const boot = async () => {
     models = createModelLoader(rig, anisotropy);
-    const entryItem = manifest.find((item) => item && item.name === ENTRY_NAME);
 
     try {
-      // ---- ① 门先到:428 KB,剩下的 11.6 MB 排在它后面 ----
-      let doorNode = null;
-      if (entryItem) {
-        doorNode = await models.load(entryItem, {
-          onBytes: (event) => {
-            // 没有 Content-Length(流式 / 缓存命中)就报不出比例,交给 bootProgress(1) 收尾
-            if (event && event.lengthComputable && event.total) {
-              gate.bootProgress(event.loaded / event.total);
-            }
-          },
-        });
-        if (doorNode) buildPorch(doorNode);
-      } else {
-        console.warn(`[room3d] 清单里没有 name 为 ${ENTRY_NAME} 的那件,首屏就直接是屋里`);
-      }
+      // ---- ① 门先到:428 KB,屋里的 11.6 MB 排在它后面 ----
+      const doorNode = await models.load(ENTRY, {
+        onBytes: (event) => {
+          // 没有 Content-Length(流式 / 缓存命中)就报不出比例,交给 bootProgress(1) 收尾
+          if (event && event.lengthComputable && event.total) {
+            gate.bootProgress(event.loaded / event.total);
+          }
+        },
+      });
+      if (doorNode) buildLanding(doorNode);
 
-      // ---- ② 其余家具在后台并发补齐。门厅没做成的话就连门一起补,然后直接是屋里 ----
-      const rest = doorNode ? manifest.filter((item) => item && item !== entryItem) : manifest.filter(Boolean);
-      furniture = (await models.loadAll(rest, {
-        // 门厅期间新到的家具一律先藏着:首屏那一格里只该有门
+      // ---- ② 屋里那 11 件在后台并发补齐;门没到就不藏,直接是屋里 ----
+      furniture = (await models.loadAll(manifest.filter(Boolean), {
         hidden: Boolean(doorNode),
         onItem: (done, total) => gate.roomProgress(total ? done / total : 1),
       })).filter(Boolean);

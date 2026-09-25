@@ -37,15 +37,6 @@ export const TARGET_LIFT = 0.4;
 export const WALL_HEIGHT = 5.6;
 export const WALL_SPAN = 2.6;
 export const WALL_PAD = 0.9;
-// 门洞后面那段暗腔的深度(米)。下限是门扇的长度 0.88 —— 这扇门是**往墙后开**的
-// (源文件里合页在左、门扇朝 -Z 那侧摆),开一半不能穿到腔外去。
-export const DOOR_RECESS_DEPTH = 1.2;
-// 暗腔有多黑:墙面色 × 这个数。它用的是不受光的材质(墙后没有灯),所以这个系数就是
-// 唯一的明暗来源 —— 深浅两套主题各自算一次,四个状态都跟着走。
-// 数要这么小是因为 Color 存的是**线性**值:×0.12 折算到屏幕上只等于 ×0.34,再经一层 ACES
-// 的暗部提升就更亮 —— 第一版给 0.12,开门看见的是水泥灰的柜子里侧。
-// (还有第三层:这个材质得关掉雾,不然腔底十来米的距离被雾抹成背景色,系数怎么调都是灰。)
-export const DOOR_RECESS_DARK = 0.02;
 
 // 台灯 glb(assets/models/desk_lamp.glb)里灯泡那颗球的**材质名** —— 认它不是为了好看,
 // 是「房间灯」那盏 SpotLight 得挂在灯泡上、开灯时的自发光也得落在它身上。
@@ -74,33 +65,49 @@ export const SPIN_MAX_QUEUED_TURNS = 3;
 // (见 main.js 的 stepPlatter)。转的是唱机 glb 里的 platter 节点,不是墙上那张黑胶。
 export const PLATTER_RPM = 100 / 3;
 
-// ---------- 门厅(首屏那扇门)与进门 ----------
+// ---------- 首屏那扇门,与「推门而入」 ----------
 //
-// 首屏只加载 door.glb(428 KB)并把镜头摆在门前:其余 11.6 MB 在后台补齐,
-// 补完之前家具一直是 `visible = false`(见 main.js 的阶段状态机)。
+// 首屏只加载这一只 glb(428 KB)、把它摆在画面正中,剩下 11.6 MB 在后台补齐
+// (补齐之前家具一直是 `visible = false`,见 main.js 的阶段状态机)。
 //
-// 门在背墙上、房间在门的**同一侧**,所以「推门进去」不可能一镜到底 ——
-// 门后那段暗腔只有 1.2 m 深,还正好被开着的门扇占住。走法因此是两段:
-// 先推到门口(画面被暗腔填满),在最近的这一刻换景 + 让家具显形,再退到定位镜头。
-// 中间换景用一块幕(跟着补间走的不透明层)盖住。
-export const ENTRY_NAME = 'door';
-// 门在画面里占多满:1 = 不多不少刚好塞满,>1 留出四周的墙与地板
-export const PORCH_FILL = 1.3;
-// 站位:方位角偏右 11°(和房间默认的 30° 同侧,墙角才露得出来)、俯角 6°(≈人平视)
-export const PORCH_AZIMUTH = (11 * Math.PI) / 180;
-export const PORCH_PITCH = (6 * Math.PI) / 180;
-// 门厅的雾按这段距离给:墙和门在雾之前,只有门框以外化进背景
-export const PORCH_FOG = [1.15, 1.9];
+// 门**不是屋里的家具**:屋里那面背墙就是一块整板。所以这份规格写在这儿,而不是
+// `src/room/manifest.rs` 的清单里 —— 字段形状故意和清单条目保持一致,加载走同一条路。
+export const ENTRY = {
+  name: 'door',
+  file: 'assets/models/door.glb',
+  position: [0, 0, 0],
+  rotation: [0, 0, 0],
+  scale: 1,
+  // 门扇 + 12 块嵌板 + 三副合页 + 双面把手是 glb 里独立的一个节点,原点在合页轴上,
+  // 所以开合 = 绕竖直的 y 转 90°(和清单里冰箱门同一条约定:{节点, 轴, 角度})。
+  door: { node: 'door_leaf', axis: 'y', deg: 90 },
+};
+// 这扇门是本地建模的 `~/blender/门.blend`(不是 Sketchfab 拿的):门扇 0.88 × 2.1 高、
+// 门框外沿 1.02 × 2.18、厚 0.077,四个材质全是纯色 baseColorFactor、一张贴图都没有。
+// 导出走 `target/tmp/door/export.py 输出 2600`,源文件摆的是开着 90°,按冰箱门那条约定
+// 烘成**关着**的;`door_frame`(三根门框)不参与降面 —— 第一版一起降把顶框降歪了 2°。
+// 顺手剥了没用的 UV(无贴图还带 TEXCOORD_0,白占一百多 KB)。4.7 MB 的 .blend → 428 KB。
+
+// 「推门而入」是两段:门外没有屋子,穿过门框只会穿进背景色。所以先推到门口(门框填满画面),
+// 在最近这一刻用一块幕(跟着补间走的不透明层)盖住换景,再从屋里退到定位镜头。
+// 门在画面里占多满:1 = 正好塞满画框,1.3 = 上下各留三成背景
+export const LANDING_FILL = 1.3;
+// 站位:方位角偏右 11°(与屋里的 30° 同侧,门框厚度与门扇的透视都看得出来)、俯角 6°(≈平视)
+export const LANDING_AZIMUTH = (11 * Math.PI) / 180;
+export const LANDING_PITCH = (6 * Math.PI) / 180;
+// 首屏这一档雾几乎用不上(画面里只有门,而且门在雾的近端之前)。留着是因为走位前段
+// 要拿它当起点,换景那一拍再换成屋里按取景算出来的那一档
+export const LANDING_FOG = [1.15, 1.9];
 // 走到位时离门心多远(米)
 export const THRESHOLD_RADIUS = 0.95;
 export const THRESHOLD_AZIMUTH = (5 * Math.PI) / 180;
 export const THRESHOLD_PITCH = (4 * Math.PI) / 180;
-// 幕落在这一头(补间的 0~1):= 走到门口、换景的那一瞬间
+// 幕落在这一头(补间的 0~1):= 走到门框前、换景的那一瞬间
 export const ENTER_REVEAL = 0.5;
 // 换景之后镜头从「已经站在屋里」起步退到定位镜头:这一段占定位距离的几分之几
 export const SETTLE_FROM = 0.82;
 export const ENTER_MS = 1900;
-// 幕在全黑处停留的这段(占补间的比例):黑一下才切场景,不给眼睛看到换景的那一帧
+// 幕在全黑处停留的这段(占补间的比例):黑一下才换场景,不给眼睛看到换景的那一帧
 export const ENTER_HOLD = 0.06;
 
 // 门以外那些 glb 并发补齐的池子大小。取 4:HTTP/1.1 下浏览器每域本来就只有 6 条连接,

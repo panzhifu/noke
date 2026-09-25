@@ -1,25 +1,23 @@
 /**
- * 门厅(首屏那扇门)的镜头位姿,以及「推门而入」那两段走位。
+ * 首屏那扇门的镜头位姿,以及「推门而入」那两段走位。
  *
- * 为什么是两段:门在背墙上,而房间在门的**同一侧** —— 门后只有一段 1.2 m 深、
- * 还被开着的门扇占住的暗腔。所以「一镜到底穿门而入」在这个场景里做不到,能做的读法是
- * 「走到门口 → 眼前一黑(幕)→ 已经在屋里,镜头退到定位」。换景那一瞬间要盖住的是三件事:
- * 家具显形、景片按真包围盒重建、雾从门厅那一档放开到房间那一档。
+ * 门浮在背景色正中,门外并没有屋子 —— 所以「一镜到底穿门而入」在这里没有意义,能用的是两个
+ * 镜头:先推到门框跟前(画面被门框与甩开的门扇填满),在最近这一刻让幕黑下去换场景,再从屋里
+ * 退到定位镜头。幕要盖住的是同一帧里发生的三件事:门退场、家具显形、雾从首屏这一格换成按
+ * 取景算出来的那一格。
  *
- * 下面把一档镜头位姿叫「一格」:门厅那一格(门前)、门口那一格(凑到门框前)、
- * 屋里那一格(整间屋子的定位镜头)。
- *
- * 三档位姿都由 framing.js 的 sphericalPose 摆(注视点 + 距离 + 方位角 + 俯角),
- * 两两之间注视点相同,所以补间只插值镜头位置这一个向量就够了。
+ * 三格镜头位姿分别叫:首屏(门前)、门框前、屋里定位。距离都由 framing.js 的 fitDistance
+ * 从包围盒算,方位由 sphericalPose 摆(注视点 + 距离 + 方位角 + 俯角)。相邻两格注视点相同,
+ * 所以补间只插值「镜头位置」这一个向量就够了。
  */
 
 import * as THREE from 'three';
 import {
   CAMERA_AZIMUTH,
-  PORCH_AZIMUTH,
-  PORCH_FILL,
-  PORCH_FOG,
-  PORCH_PITCH,
+  LANDING_AZIMUTH,
+  LANDING_FILL,
+  LANDING_FOG,
+  LANDING_PITCH,
   SETTLE_FROM,
   THRESHOLD_AZIMUTH,
   THRESHOLD_PITCH,
@@ -62,25 +60,25 @@ export function applyPose(camera, host, pose, ctx) {
 }
 
 /**
- * 门厅那一格:正对门、几乎平视,门完整入画并留出四周的墙与地板(PORCH_FILL)。
- * 距离是从门自己的包围盒量的 —— 换一扇门、改一下清单里的缩放,构图自己跟上。
+ * 首屏那一格:正对门、几乎平视,门完整入画、四周留出背景(LANDING_FILL)。
+ * 距离是从门自己的包围盒量的 —— 换一扇门、改一下缩放,构图跟着走。
  */
-export function porchPose(camera, host, box) {
+export function landingPose(camera, host, box) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const distance = fitDistance(camera, host, size, PORCH_FILL, size.z);
+  const distance = fitDistance(camera, host, size, LANDING_FILL, size.z);
   const look = new THREE.Vector3(center.x, box.min.y + size.y / 2, center.z);
-  const pose = sphericalPose(look, distance, PORCH_AZIMUTH, PORCH_PITCH);
+  const pose = sphericalPose(look, distance, LANDING_AZIMUTH, LANDING_PITCH);
   return {
     ...pose,
     near: Math.max(distance * 0.02, 0.1),
     far: distance * 12,
-    fogNear: distance * PORCH_FOG[0],
-    fogFar: distance * PORCH_FOG[1],
+    fogNear: distance * LANDING_FOG[0],
+    fogFar: distance * LANDING_FOG[1],
   };
 }
 
-/** 屋里那一格:framing.js 按场景包围盒算出来的定位镜头。 */
+/** 屋里那一格:framing.js 按家具包围盒算出来的定位镜头。 */
 export function roomPose(framing) {
   const pose = sphericalPose(framing.center, framing.distance, CAMERA_AZIMUTH, CAMERA_PITCH);
   return {
@@ -95,9 +93,9 @@ export function roomPose(framing) {
 /**
  * 走位补间。
  * ctx: { from, to, duration, revealAt, hold, onReveal, onDone, apply }
- *  - from / to   两档位姿(门厅 / 房间定位)
+ *  - from / to   两格位姿(首屏 / 屋里定位)
  *  - revealAt    整段里换景的那一点(0~1),幕在这里全黑
- *  - hold        幕全黑停多久(占整段的比例),镜头在这一拍跳到屋里起步的那一格
+ *  - hold        幕全黑停多久(占整段的比例);这期间镜头摆到屋里起步的那一格
  *  - apply(pose, curtain)  每帧把位姿刷到相机上、把不透明度刷到幕上
  * 返回 { step } —— step(dt) 还在走为 true(交给 loop.js 的按需渲染,走完自己就停摆)。
  */
@@ -105,7 +103,7 @@ export function createWalkIn(ctx) {
   const { from, to, duration, revealAt, hold, onReveal, onDone, apply } = ctx;
   const at = revealAt + hold;
 
-  // 门口那一格:和门厅同一个注视点,只是凑到 THRESHOLD_RADIUS
+  // 门框前那一格:与首屏同一个注视点,只是凑到离门心 THRESHOLD_RADIUS
   const threshold = sphericalPose(from.target, THRESHOLD_RADIUS, THRESHOLD_AZIMUTH, THRESHOLD_PITCH);
   // 幕后面那一拍:屋里定位镜头的同一条视线上往里收一点,所以切过去之后镜头还在往前后拉,
   // 不会「啪」地定死

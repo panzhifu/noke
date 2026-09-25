@@ -26,7 +26,7 @@
 }
 
 /* ---------- 阶段:哪些东西什么时候该露出来 ----------
-   data-phase 由 assets/room/gate.js 写(boot → porch → walking → room,起不来是 page),
+   data-phase 由 assets/room/gate.js 写(boot → landing → walking → room,起不来是 page),
    这里只跟着它摆,JS 里不去动任何样式。 */
 
 /* 顶栏那两枚开关管的是屋里的灯与昼夜,人还在门外时用不上。
@@ -40,8 +40,8 @@ html:not([data-phase="room"]):not([data-phase="page"]) .topbar {
   pointer-events: none;
 }
 
-/* 门厅阶段:剩下的家具还在后台补。整屏只留底部这一条发丝线,补满自己收掉。 */
-.porch-line {
+/* 首屏阶段:屋里那 11 件还在后台补,整屏只留底部这一条线,补满自己收掉。 */
+.landing-line {
   position: fixed;
   inset: auto 0 0 0;
   z-index: 18;
@@ -50,11 +50,11 @@ html:not([data-phase="room"]):not([data-phase="page"]) .topbar {
   pointer-events: none;
 }
 
-html[data-phase="porch"] .porch-line {
+html[data-phase="landing"] .landing-line {
   display: block;
 }
 
-.porch-fill {
+.landing-fill {
   display: block;
   width: 100%;
   height: 100%;
@@ -66,11 +66,11 @@ html[data-phase="porch"] .porch-line {
 }
 
 /* 齐了就淡掉:再留着就是「好像还在加载」的错觉,而那时候门早就可以点了 */
-html[data-phase="porch"] .porch-line[data-p="1"] .porch-fill {
+html[data-phase="landing"] .landing-line[data-p="1"] .landing-fill {
   opacity: 0;
 }
 
-/* 进门那块幕:不透明度由补间一帧一帧写(见 porch.js 的 curtainAt)。
+/* 进门那块幕:不透明度由补间一帧一帧写(见 landing.js 的 curtainAt)。
    压在画布之上、氛围层之下,所以暗角和颗粒在幕全黑时还连着。颜色跟场景背景是同一个。 */
 .curtain {
   position: fixed;

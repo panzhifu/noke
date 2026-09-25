@@ -1,7 +1,7 @@
 /**
  * 把清单里的 glb 搬进 rig,并挑出「能点的那些网格」(userData 上挂 spot / door / spin / owner)。
  *
- * 加载的节奏由 main.js 分两档管(首屏只要门,其余在后台并发补齐),这一层只提供三件事:
+ * 加载的节奏由 main.js 分两格管(首屏只要门,屋里的在后台并发补齐),这一层只提供三件事:
  *   load()     单件:下载 → 装配 → 挑可点网格
  *   loadAll()  一批:并发 LOAD_CONCURRENCY 路,每件完成时报一次进度
  *   prewarm()  把材质与贴图提前交给 GPU,免得「进门」那一帧才去编译着色器、上传贴图
@@ -86,7 +86,7 @@ export function createModelLoader(rig, anisotropy) {
    * 所以 loaded/total 是真字节数)。失败只警告、返回 null:少一件家具不该拖垮整间屋子。
    *
    * `hidden` 必须在 `rig.add` **之前**定下来 —— rig 每帧都在画,晚一步这件家具就在
-   * 门厅那一格里显形了一帧(门厅 = 首屏只有那扇门的画面)。
+   * 首屏那一格里显形了一帧(那一格里只该有门)。
    */
   async function load(item, { onBytes, hidden = false } = {}) {
     if (!item || !item.file) return null;
@@ -111,7 +111,7 @@ export function createModelLoader(rig, anisotropy) {
     // 墙的位置就是从那个盒子推出来的,算进去等于把墙自己推远(见 scene.js 的 fitRig)
     node.userData.wall = Boolean(item.wall);
 
-    // 会开关的部件(冰箱门 / 门厅那扇门):清单里给的是 {node, axis, deg},按名字从 glb 里
+    // 会开关的部件(首屏那扇门 / 冰箱门):规格给的是 {node, axis, deg},按名字从 glb 里
     // 挑出那个节点。轴与角度**跟着模型走** —— 冰箱门是竖直铰链(绕 Y)、上一台唱机的防尘盖
     // 是水平铰链(绕 X),写死一套就必有一件是错的。节点原点在导出时就摆在铰链上。
     let door = null;
@@ -151,7 +151,7 @@ export function createModelLoader(rig, anisotropy) {
         if (door) child.userData.door = door;
         // 存的就是那个上半身节点(它的原点在底盘轴心上);转多少度交给 config 的 SPIN_DEG
         if (spin) child.userData.spin = spin;
-        // 门厅阶段只许点门:main.js 的 pickList 按「这块网格是谁家的」筛
+        // 首屏只许点门:main.js 的 pickList 按「这块网格是谁家的」筛
         child.userData.owner = node.name;
         // 面数太高的走包围盒代理:不然每帧一次射线就要遍历几十万三角形
         if (trianglesOf(child.geometry) >= HEAVY_PICK_TRIS) useBoxPick(child);
@@ -194,7 +194,7 @@ export function createModelLoader(rig, anisotropy) {
    * 预热:着色器交给 compile,贴图交给 initTexture。
    * `compile` 走的是 traverse(不是 traverseVisible),所以家具还藏着也能先把材质编好;
    * 贴图不是 —— 它要真被画到才会上传,所以这里点名逐个传。
-   * 挑在「门厅里闲着的这两秒」做,进门那一刀就不会被一次编译 + 一堆上传顶住。
+   * 挑在首屏那段时间里做,换景那一帧才不会在一次编译 + 一堆上传上被顶住。
    */
   function prewarm(renderer, scene, camera) {
     for (const texture of textures) {
