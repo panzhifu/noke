@@ -105,19 +105,10 @@ pub fn App() -> impl IntoView {
     }
 }
 
-/// Rust 起来之后就把 index.html 里的加载块撤掉。
-fn remove_boot_screen() {
-    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
-        return;
-    };
-    if let Some(boot) = document.get_element_by_id("boot") {
-        boot.remove();
-    }
-}
-
+/// wasm 起来之后不做任何收尾:加载界面撤不撤只看 `<html data-phase>`
+/// (门厅画成 → porch、3D 这层起不来 → page、还有一个 15s 的超时兜底,见 index.html)。
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 fn main() {
     console_error_panic_hook::set_once();
     mount_to_body(App);
-    remove_boot_screen();
 }

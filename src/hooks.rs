@@ -158,6 +158,17 @@ pub fn announce_room_mounted() {
     }
 }
 
+/// 键盘那条入口上的「推门而入」:3D 层听见了就按点门那同一条路走进去。
+/// 首屏是关着的门,而场景本身 aria-hidden —— 键盘只有这里进得了这门。
+pub fn announce_enter() {
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    if let Ok(event) = web_sys::CustomEvent::new("noke:enter") {
+        document.dispatch_event(&event).ok();
+    }
+}
+
 /// `"work"` / `"poster:2"` → Spot。认不出来就当作没点。
 fn parse_spot(raw: &str) -> Option<Spot> {
     match raw {

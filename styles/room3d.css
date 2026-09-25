@@ -25,6 +25,62 @@
   touch-action: none;
 }
 
+/* ---------- 阶段:哪些东西什么时候该露出来 ----------
+   data-phase 由 assets/room/gate.js 写(boot → porch → walking → room,起不来是 page),
+   这里只跟着它摆,JS 里不去动任何样式。 */
+
+/* 顶栏那两枚开关管的是屋里的灯与昼夜,人还在门外时用不上。
+   收掉用 opacity + pointer-events 而不是 display:淡出时它还在原位,不引起布局跳动。 */
+.topbar {
+  transition: opacity 0.4s var(--ease);
+}
+
+html:not([data-phase="room"]):not([data-phase="page"]) .topbar {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 门厅阶段:剩下的家具还在后台补。整屏只留底部这一条发丝线,补满自己收掉。 */
+.porch-line {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 18;
+  height: 2px;
+  display: none;
+  pointer-events: none;
+}
+
+html[data-phase="porch"] .porch-line {
+  display: block;
+}
+
+.porch-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+  background: var(--accent);
+  opacity: 0.45;
+  transition: transform 0.35s var(--ease), opacity 0.4s var(--ease);
+}
+
+/* 齐了就淡掉:再留着就是「好像还在加载」的错觉,而那时候门早就可以点了 */
+html[data-phase="porch"] .porch-line[data-p="1"] .porch-fill {
+  opacity: 0;
+}
+
+/* 进门那块幕:不透明度由补间一帧一帧写(见 porch.js 的 curtainAt)。
+   压在画布之上、氛围层之下,所以暗角和颗粒在幕全黑时还连着。颜色跟场景背景是同一个。 */
+.curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  background: var(--bg);
+  opacity: var(--w, 0);
+  pointer-events: none;
+}
+
 /* ---------- 入口条:整条隐形,键盘 Tab 进来才显形 ---------- */
 
 /* 页面上不留文字之后,这条只服务键盘和读屏。锚在左上角,不占 grid 行 ——
@@ -82,6 +138,12 @@
   .entry {
     padding: 0.38rem 0.72rem;
   }
+}
+
+/* 「推门而入」只管门外那一段时间:进了屋(或者 3D 压根起不来)它就点不出别处 */
+html[data-phase="room"] .entry-enter,
+html[data-phase="page"] .entry-enter {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

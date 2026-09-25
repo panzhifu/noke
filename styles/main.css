@@ -97,6 +97,24 @@ a {
   color: var(--accent-fg);
 }
 
+/* 整屏是一张画布,在它上面按住拖一下就会把藏起来的文字(h1、隐形入口条)选成一块琥珀色,
+   而页面上不该看得见任何选区。所以默认禁掉选择,只留面板正文 —— 那里有邮箱要复制。 */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.panel-body {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 触屏上点按钮也不给那层灰蓝色高亮:整站都是图标,闪一下像出了错 */
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
 code {
   font-family: var(--font-mono);
   font-size: 0.9em;
@@ -111,29 +129,97 @@ code {
   white-space: nowrap;
 }
 
-/* ---------- 加载块(wasm 就绪后由 Rust 撤掉) ---------- */
+/* ---------- 加载界面:一扇正在打开的门 ----------
+   进度不是转圈,是门开多少:--p(0→1)由 assets/room/gate.js 按门那只 glb 的
+   真实字节数写进来,门缝里透出的暖光也是同一个数。
+   撤掉它的条件是 <html> 上出现了 data-phase —— 门厅画成(porch)或 3D 这层起不来(page)。 */
 
-#boot {
+.gate {
   position: fixed;
   inset: 0;
-  display: grid;
-  place-items: center;
+  z-index: 60;
+  display: none;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
   background: var(--bg);
-  z-index: 50;
 }
 
-.boot-mark {
-  width: 26px;
-  height: 26px;
-  border: 2px solid var(--accent);
-  border-radius: 6px;
-  animation: boot-spin 1.1s var(--ease) infinite;
+html.js .gate {
+  display: grid;
 }
 
-@keyframes boot-spin {
-  0% { transform: rotate(0deg) scale(0.9); opacity: 0.55; }
-  50% { transform: rotate(180deg) scale(1.05); opacity: 1; }
-  100% { transform: rotate(360deg) scale(0.9); opacity: 0.55; }
+html[data-phase] .gate {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s var(--ease), visibility 0s 0.5s;
+}
+
+.gate-door {
+  position: relative;
+  width: 60px;
+  height: 88px;
+  border: 2px solid var(--line-strong);
+  border-radius: 3px 3px 0 0;
+  perspective: 320px;
+  /* 门框里那道光:门开得越大露得越多,颜色是屋里那盏台灯的暖色 */
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.22), transparent 65%);
+}
+
+.gate-light {
+  position: absolute;
+  inset: 2px 2px 0 0;
+  border-radius: 2px 0 0 0;
+  background: linear-gradient(100deg, var(--accent), transparent 72%);
+  opacity: calc(var(--p, 0) * 0.85);
+}
+
+.gate-leaf {
+  position: absolute;
+  top: 2px;
+  bottom: 0;
+  left: 2px;
+  right: 2px;
+  transform-origin: left center;
+  /* 开到底留 6° 不裁平:正对 90° 时这块面退化成一个边,看着像消失而不是推开 */
+  transform: rotateY(calc(var(--p, 0) * -84deg));
+  border: 1px solid var(--line-strong);
+  border-radius: 2px 0 0 0;
+  background: var(--bg-elev-2);
+  box-shadow: inset 0 0 0 3px color-mix(in oklab, var(--line) 60%, transparent);
+}
+
+.gate-knob {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.gate-rail {
+  width: 96px;
+  height: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.gate-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 减弱动效时门不跟着进度转:只留下面那条进度线 */
+  .gate-leaf {
+    transform: none;
+  }
 }
 
 /* ---------- 顶栏:只剩主题开关 ---------- */

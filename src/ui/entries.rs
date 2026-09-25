@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 use crate::content::POSTER_MARKS;
+use crate::hooks;
 use crate::ui::panel::Spot;
 
 /// 键盘和读屏用的入口条。
@@ -42,9 +43,14 @@ pub fn EntryBar(set_spot: WriteSignal<Option<Spot>>) -> impl IntoView {
         })
         .collect::<Vec<_>>();
 
+    // 首屏那扇门对键盘是隐形的(场景 aria-hidden),所以入口条上得自己有一枚。
+    // 进了屋它就没用了,由 CSS 按 data-phase 收掉。
     view! {
         <nav class="entry-bar sr-only" aria-label="站点入口">
             <span class="entry-row">
+                <button type="button" class="entry entry-enter" on:click=|_| hooks::announce_enter()>
+                    "推门而入"
+                </button>
                 { main }
                 { posters }
             </span>

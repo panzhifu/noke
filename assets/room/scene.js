@@ -49,7 +49,12 @@ export function createScene(variant) {
   lamp.shadow.normalBias = 0.008;
   scene.add(lamp, lamp.target);
 
-  return { scene, hemi, key, fill, bounce, lamp };
+  // 主光 / 补光 / 反弹光共用这一个瞄准点。它在 createScene 里建好、之后只挪位置不重建 ——
+  // 门厅和屋里是两次测量(见 fitRig),每次都 new 一个 target 就会往场景里漏一个孤儿节点。
+  const focus = new THREE.Object3D();
+  scene.add(focus);
+
+  return { scene, hemi, key, fill, bounce, lamp, focus };
 }
 
 /**
@@ -172,15 +177,19 @@ export function createFloor(variant, span, center) {
 /**
  * 阴影相机、主光与补光的位置都按实际场景尺寸来,不然大件家具会糊或者被裁掉。
  * 反弹光从地面朝上打,所以它的位置在场景下方。
+ *
+ * `nodes` 就是要量出来的那一堆家具:调用方负责把不该参与取景的摘出去
+ * (嵌在墙上的门 —— 墙的位置就是从这个盒子推的,算进去等于把墙自己推远;
+ *  程序化的地板与景片同理,门厅那两块地板有十几米)。
  */
-export function fitRig(scene, lights, rig) {
-  // 嵌在墙上的家具(门)先摘下来再量包围盒,量完装回去:墙的位置就是从这个盒子推出来的,
-  // 门一算进去就把盒子撑大、把墙自己推远,而这个反馈**没有不动点** —— 墙退 0.9,门就得
-  // 再往后贴 0.9。表现是「加一扇门,整间屋子被拉远一圈、墙还贴不上」。
-  const mounted = rig.children.filter((child) => child.userData.wall);
-  for (const node of mounted) rig.remove(node);
-  const bounds = new THREE.Box3().setFromObject(rig);
-  for (const node of mounted) rig.add(node);
+export function fitRig(lights, focus, nodes) {
+  const bounds = new THREE.Box3();
+  const one = new THREE.Box3();
+  for (const node of nodes) {
+    if (one.setFromObject(node).isEmpty()) continue;
+    bounds.union(one);
+  }
+  if (bounds.isEmpty()) bounds.makeSafe();
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
   const span = Math.max(size.x, size.z, 1);
@@ -194,17 +203,34 @@ export function fitRig(scene, lights, rig) {
   cam.far = span * 6;
   cam.updateProjectionMatrix();
 
-  const target = new THREE.Object3D();
-  target.position.set(center.x, 0, center.z);
-  scene.add(target);
+  focus.position.set(center.x, 0, center.z);
 
-  // 主光从左前上方来:这个方向下,两面墙的正面都接得到光,影子甩向角落
-  lights.key.target = target;
+  // 主光从左前上方来:这个方向下,两面墙的正面都接得到光,影子甩向角落。
+  // 三盏光都是平行的,所以只有**方向**要紧、距离无所谓 —— 按 span 放大只是让它们
+  // 各自离得开:门厅那次测量 span 只有 1,方向却和整间屋子一模一样。
+  lights.key.target = focus;
   lights.key.position.set(center.x + span * 0.55, span * 1.15, center.z + span * 0.75);
-  lights.fill.target = target;
+  lights.fill.target = focus;
   lights.fill.position.set(center.x - span * 0.85, span * 0.75, center.z - span * 0.55);
-  lights.bounce.target = target;
+  lights.bounce.target = focus;
   lights.bounce.position.set(center.x - span * 0.3, -span * 0.6, center.z + span * 0.4);
 
   return { center, size };
+}
+
+/**
+ * 一套「景片」:地板 + 墙角(带门洞与暗腔)。
+ *
+ * 屋里那套的尺寸是从家具包围盒推出来的,而门厅阶段家具还没到 —— 所以这套要建两遍:
+ * 先按门自己的包围盒铺一小段(首屏只有门前那一格),家具齐了再按真值建屋里那套。
+ * 两套都挂在视差组里,同一时刻只有一套 visible:它们各自的网格不会打架,
+ * 换的那一刀由进门补间里的幕盖住(见 porch.js)。
+ */
+export function buildStage(variant, size, center, floorSpan, doorway = null) {
+  const group = new THREE.Group();
+  group.name = 'stage';
+  const floor = createFloor(variant, floorSpan, center);
+  const walls = createWalls(variant, size, center, doorway);
+  group.add(floor, walls.group);
+  return { group, floor, walls };
 }

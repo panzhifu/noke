@@ -74,8 +74,48 @@ export const SPIN_MAX_QUEUED_TURNS = 3;
 // (见 main.js 的 stepPlatter)。转的是唱机 glb 里的 platter 节点,不是墙上那张黑胶。
 export const PLATTER_RPM = 100 / 3;
 
-// hover 时往材质里加的一点自发光(琥珀色),浅背景上够显眼又不刺眼
-export const HOVER_EMISSIVE = 0x3a2a10;
+// ---------- 门厅(首屏那扇门)与进门 ----------
+//
+// 首屏只加载 door.glb(428 KB)并把镜头摆在门前:其余 11.6 MB 在后台补齐,
+// 补完之前家具一直是 `visible = false`(见 main.js 的阶段状态机)。
+//
+// 门在背墙上、房间在门的**同一侧**,所以「推门进去」不可能一镜到底 ——
+// 门后那段暗腔只有 1.2 m 深,还正好被开着的门扇占住。走法因此是两段:
+// 先推到门口(画面被暗腔填满),在最近的这一刻换景 + 让家具显形,再退到定位镜头。
+// 中间换景用一块幕(跟着补间走的不透明层)盖住。
+export const ENTRY_NAME = 'door';
+// 门在画面里占多满:1 = 不多不少刚好塞满,>1 留出四周的墙与地板
+export const PORCH_FILL = 1.3;
+// 站位:方位角偏右 11°(和房间默认的 30° 同侧,墙角才露得出来)、俯角 6°(≈人平视)
+export const PORCH_AZIMUTH = (11 * Math.PI) / 180;
+export const PORCH_PITCH = (6 * Math.PI) / 180;
+// 门厅的雾按这段距离给:墙和门在雾之前,只有门框以外化进背景
+export const PORCH_FOG = [1.15, 1.9];
+// 走到位时离门心多远(米)
+export const THRESHOLD_RADIUS = 0.95;
+export const THRESHOLD_AZIMUTH = (5 * Math.PI) / 180;
+export const THRESHOLD_PITCH = (4 * Math.PI) / 180;
+// 幕落在这一头(补间的 0~1):= 走到门口、换景的那一瞬间
+export const ENTER_REVEAL = 0.5;
+// 换景之后镜头从「已经站在屋里」起步退到定位镜头:这一段占定位距离的几分之几
+export const SETTLE_FROM = 0.82;
+export const ENTER_MS = 1900;
+// 幕在全黑处停留的这段(占补间的比例):黑一下才切场景,不给眼睛看到换景的那一帧
+export const ENTER_HOLD = 0.06;
+
+// 门以外那些 glb 并发补齐的池子大小。取 4:HTTP/1.1 下浏览器每域本来就只有 6 条连接,
+// 开满反而互相抢;Draco 解码也有 worker 上限。
+export const LOAD_CONCURRENCY = 4;
+
+// 点中一件家具:镜头除了把注视点挪过去,还要按**它自己的尺寸**推近 —— 点床和点鼠标
+// 不该拉得一样近。数给的是 fitDistance 的那个 fill:1 = 物品正好塞满画面,1.9 ≈ 占一半高。
+// 下限是 DISTANCE_RANGE[0] × 定位距离(也就是滚轮本来能推到的最近处),所以这里不需要
+// 临时放宽钳位,也不需要「退出时记得改回来」那份账。
+export const ZOOM_FILL = 1.9;
+// 拉近与放回的速度(每秒推进多少比例),指数缓出 —— 和开门、转椅一个手感
+export const RADIUS_EASE = 3.6;
+
+// 贴图要处理的槽位:斜着看地面时让贴图不发糊靠的是各向异性,不是分辨率
 export const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'];
 
 export const deg = (value) => THREE.MathUtils.degToRad(value);

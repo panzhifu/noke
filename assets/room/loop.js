@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import { PARALLAX_EASE, TARGET_EASE } from './config.js';
+import { PARALLAX_EASE, RADIUS_EASE, TARGET_EASE } from './config.js';
 
 const QUIET_FRAMES = 6;
 const EPS = 1e-4;
@@ -21,15 +21,20 @@ const MIN_FRAME_GAP = 1000 / 72;
 const num = (value) => Number(value.toFixed(2));
 
 /**
- * ctx: { host, renderer, scene, camera, controls, rig, parallax, targetGoal,
+ * ctx: { host, renderer, scene, camera, controls, rig, parallax, targetGoal, radiusGoal,
  *        isReduced, step, pick }
  *  - isReduced():这一帧该不该做视差(减弱动效偏好,由 main.js 持有)
  *  - step(dt):光照状态的插值推进一步,返回 true 表示还在渐变中
  *  - pick():成帧之后做一次 hover 拾取,一帧最多一次
+ *  - radiusGoal:点家具拉近 / 退回定位镜头用的 { value: 距离 | null } —— 每帧沿
+ *    「注视点 → 镜头」那条线把半径推近目标,到了就自己清空(把控制权还给滚轮)
  * 返回 { invalidate, requestPick }
  */
 export function createLoop(ctx) {
-  const { host, renderer, scene, camera, controls, rig, parallax, targetGoal, isReduced, step, pick } = ctx;
+  const {
+    host, renderer, scene, camera, controls, rig, parallax, targetGoal, radiusGoal,
+    isReduced, step, pick,
+  } = ctx;
 
   let raf = 0;
   let drawing = false;
@@ -71,6 +76,24 @@ export function createLoop(ctx) {
     };
   };
 
+  /**
+   * 拉近 / 退回:只改「注视点 → 镜头」这段长度,方向一点不动 —— 用户已经转到的角度得留着。
+   * 到位之后把 radiusGoal.value 置回 null,否则滚轮想缩放会被它一直拽回去。
+   */
+  const easeRadius = (dt) => {
+    if (!radiusGoal || radiusGoal.value === null) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const radius = offset.length();
+    if (radius < EPS) return;
+    const goal = radiusGoal.value;
+    // 指数逼近:起步快、收尾慢,和开门转椅一个手感;减弱动效时直接落位
+    const next = isReduced() ? goal : radius + (goal - radius) * Math.min(1, dt * RADIUS_EASE);
+    const arrived = Math.abs(next - goal) < EPS;
+    offset.setLength(arrived ? goal : next);
+    camera.position.copy(controls.target).add(offset);
+    if (arrived) radiusGoal.value = null;
+  };
+
   const draw = () => {
     raf = 0;
     // 一帧里 controls.update() 会同步派发 change → 又回调 invalidate():
@@ -87,11 +110,12 @@ export function createLoop(ctx) {
         // 几何真的转了,阴影才得跟着重算
         renderer.shadowMap.needsUpdate = true;
       }
-      controls.target.lerp(targetGoal, TARGET_EASE);
-      controls.update();
       const now = performance.now();
       const dt = Math.min((now - lastTick) / 1000, 0.25);
       lastTick = now;
+      controls.target.lerp(targetGoal, TARGET_EASE);
+      easeRadius(dt);
+      controls.update();
       // 状态插值先推进(它跟限帧无关,不然高刷屏上渐变会拖长)
       const blending = step ? step(dt) : false;
       if (now - lastDrawn < MIN_FRAME_GAP) {
