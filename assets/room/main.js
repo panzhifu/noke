@@ -45,7 +45,7 @@ import {
   SPIN_MAX_QUEUED_TURNS,
   SPIN_SETTLE,
   STATE_EASE,
-  VINYL_RPM,
+  PLATTER_RPM,
 } from './config.js';
 import { VARIANTS, readVariant, variant, variantKey } from './palette.js';
 import { readManifest } from './manifest.js';
@@ -159,9 +159,10 @@ function start(host) {
   let lampBulb = null;
   let door = null;
   let spin = null;
-  // 唱机上那张黑胶(清单里的 vinyl 那件)—— 房间灯开着时它在唱盘上转
-  let vinyl = null;
-  const vinylOmega = (VINYL_RPM * Math.PI * 2) / 60;
+  // 唱机自己的唱盘(唱机 glb 里的 platter 节点)—— 房间灯开着时它转。
+  // 挂在唱盘上而不是挂在黑胶上:黑胶已经上墙当封面了,机器自己的盘转起来才像在台子上放着。
+  let platter = null;
+  const platterOmega = (PLATTER_RPM * Math.PI * 2) / 60;
   let center = new THREE.Vector3();
   let size = new THREE.Vector3(1, 1, 1);
   let framing = null;
@@ -323,16 +324,16 @@ function start(host) {
   };
 
   /**
-   * 唱片:房间灯开着就在唱盘上转(33⅓ 转/分),灯一关就停。
-   * 「什么时候转」交给房间灯那枚开关,是因为这个循环是**按需渲染**的 —— 唱片常转就等于
+   * 唱盘:房间灯开着就转(33⅓ 转/分),灯一关就停。
+   * 「什么时候转」交给房间灯那枚开关,是因为这个循环是**按需渲染**的 —— 唱盘常转就等于
    * 帧循环永不停摆;挂在灯上,关灯静置照样停摆,省电那条还剩一半。
-   * 阴影贴图不跟着重画:这张盘是圆的,转起来投影没变。
+   * 阴影贴图不跟着重画:盘是圆的,转起来投影没变(盘面上那圈标签跟着转,但它是平的)。
    */
-  const stepVinyl = (dt) => {
-    if (!vinyl || document.documentElement.dataset.lights !== 'on') return false;
-    vinyl.rotation.y += vinylOmega * dt;
+  const stepPlatter = (dt) => {
+    if (!platter || document.documentElement.dataset.lights !== 'on') return false;
+    platter.rotation.y += platterOmega * dt;
     // 折回一圈之内(一圈正好是 2π,视觉无跳变),连开几天也不掉精度
-    if (vinyl.rotation.y > Math.PI * 2) vinyl.rotation.y -= Math.PI * 2;
+    if (platter.rotation.y > Math.PI * 2) platter.rotation.y -= Math.PI * 2;
     return true;
   };
 
@@ -409,7 +410,7 @@ function start(host) {
       const blending = stepState(dt);
       const swinging = stepDoor(dt);
       const turning = stepSpin(dt);
-      const spinning = stepVinyl(dt);
+      const spinning = stepPlatter(dt);
       return blending || swinging || turning || spinning;
     },
     pick: () => pickAt(true),
@@ -576,9 +577,9 @@ function start(host) {
         console.warn(`[room3d] 清单里认不出台灯的灯泡(材质名 ${LAMP_BULB_MATERIAL}),开灯时没有那团暖光`);
       }
 
-      // 唱机上那张黑胶:按清单里的 name 找到那件,房间灯开着时它在唱盘上转(见 stepVinyl)
-      vinyl = rig.getObjectByName('vinyl') || null;
-      if (!vinyl) console.warn('[room3d] 清单里没有名为 vinyl 的家具,唱片不会转');
+      // 唱盘:唱机 glb 里单独分出来的 platter 节点,房间灯开着时它转(见 stepPlatter)
+      platter = rig.getObjectByName('platter') || null;
+      if (!platter) console.warn('[room3d] 唱机里没有 platter 节点,唱盘不会转');
 
       // 门嵌在背墙上:先量门自己的包围盒 → 墙照着它开洞 → 再把门贴到墙面上。
       // 顺序不能倒:墙的位置是从 size/center 推的,而门不参与那次测量(见 scene.js 的 fitRig),
@@ -597,10 +598,13 @@ function start(host) {
       rig.add(floor);
       walls = createWalls(current, size, center, doorway);
       rig.add(walls.group);
-      if (doorNode) {
-        // 离墙 3mm:门框和墙面是两套网格,共面的那条边会打架(z-fighting)
-        doorNode.position.z = walls.backZ + 0.003;
-      } else {
+      // 挂在背墙上的家具(门、墙上当封面的那张黑胶)统一贴到墙面上。
+      // 离墙 3mm:它们自己的网格和墙是两套网格,共面的那条边会打架(z-fighting)。
+      // 清单里写的那个 z 只是给 devtools 看着方便,真正贴上去靠这一行。
+      for (const node of rig.children) {
+        if (node.userData.wall) node.position.z = walls.backZ + 0.003;
+      }
+      if (!doorNode) {
         console.warn('[room3d] 清单里没有名为 door 的家具,背墙就是一块整板');
       }
 

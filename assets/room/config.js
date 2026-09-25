@@ -71,8 +71,8 @@ export const SPIN_MAX_QUEUED_TURNS = 3;
 
 // 唱盘转速:33⅓ 转/分(黑胶的标准速度),一圈 1.8 秒。只在房间灯开着时转 ——
 // 这个循环是按需渲染的,常转就等于永不停摆,所以「什么时候转」得挂在一个已有开关上
-// (见 main.js 的 stepVinyl)。
-export const VINYL_RPM = 100 / 3;
+// (见 main.js 的 stepPlatter)。转的是唱机 glb 里的 platter 节点,不是墙上那张黑胶。
+export const PLATTER_RPM = 100 / 3;
 
 // hover 时往材质里加的一点自发光(琥珀色),浅背景上够显眼又不刺眼
 export const HOVER_EMISSIVE = 0x3a2a10;
