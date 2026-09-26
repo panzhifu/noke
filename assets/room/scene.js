@@ -123,20 +123,10 @@ export function createFloor(variant, span, center) {
  * 阴影相机、主光与补光的位置都按实际场景尺寸来,不然大件家具会糊或者被裁掉。
  * 反弹光从地面朝上打,所以它的位置在场景下方。
  *
- * `nodes` 就是参加取景的那些家具,调用方负责把不该参与的摘出去:挂在墙上的那几件(墙上
- * 当封面的黑胶 —— 墙的位置正是从这个盒子推出来的,把盒子算进去等于把墙自己推远)、
- * 以及程序化的地板与景片(那块地板有十几米宽)。
+ * 尺寸与中心由调用方给(main.js 的 assembleRoom 按家具包围盒量出来),
+ * 所以整层只量这一次灯。
  */
-export function fitRig(lights, focus, nodes) {
-  const bounds = new THREE.Box3();
-  const one = new THREE.Box3();
-  for (const node of nodes) {
-    if (one.setFromObject(node).isEmpty()) continue;
-    bounds.union(one);
-  }
-  if (bounds.isEmpty()) bounds.makeSafe();
-  const size = bounds.getSize(new THREE.Vector3());
-  const center = bounds.getCenter(new THREE.Vector3());
+export function fitRig(lights, focus, size, center) {
   const span = Math.max(size.x, size.z, 1);
 
   const cam = lights.key.shadow.camera;
@@ -150,23 +140,37 @@ export function fitRig(lights, focus, nodes) {
 
   focus.position.set(center.x, 0, center.z);
 
-  // 主光从左前上方来:这个方向下,两面墙的正面都接得到光,影子甩向角落。
-  // 三盏光都是平行的,所以只有**方向**要紧、距离无所谓 —— 按 span 放大只是让它们
-  // 各自离得开:首屏那次量的只有门,span 只有 1,方向却和整间屋子一模一样。
+  // 主光从左前上方来:这个方向下,两面墙的正面都接得到光,影子甩向角落
   lights.key.target = focus;
   lights.key.position.set(center.x + span * 0.55, span * 1.15, center.z + span * 0.75);
   lights.fill.target = focus;
   lights.fill.position.set(center.x - span * 0.85, span * 0.75, center.z - span * 0.55);
   lights.bounce.target = focus;
   lights.bounce.position.set(center.x - span * 0.3, -span * 0.6, center.z + span * 0.4);
-
-  return { center, size };
 }
 
 /**
- * 一套「景片」:地板 + 两面墙。尺寸由调用方给 —— 屋里这套是从家具包围盒推出来的,
- * 而首屏那一格用不上它(画面上只有门,背景和背景色之间没有别的东西)。
- * 单独成一个 group,是为了进屋时一次 `visible` 就能把整片舞台开出来。
+ * 一堆节点的合并包围盒(量家具用)。
+ *
+ * `Box3.setFromObject` 不看 `visible`,量包围盒与可见与否无关 —— 调用方想量什么都行。
+ */
+export function boundsOf(nodes) {
+  const bounds = new THREE.Box3();
+  const one = new THREE.Box3();
+  for (const node of nodes) {
+    if (one.setFromObject(node).isEmpty()) continue;
+    bounds.union(one);
+  }
+  if (bounds.isEmpty()) bounds.makeSafe();
+  return {
+    size: bounds.getSize(new THREE.Vector3()),
+    center: bounds.getCenter(new THREE.Vector3()),
+  };
+}
+
+/**
+ * 一套「景片」:地板 + 两面墙(墙角照 pinchen 的做法是两块景片,不是封闭房间)。
+ * 尺寸由调用方给 —— 从家具包围盒推出来(main.js 的 assembleRoom),建一次用到底。
  */
 export function buildStage(variant, size, center, floorSpan) {
   const group = new THREE.Group();

@@ -26,10 +26,10 @@
 }
 
 /* ---------- 阶段:哪些东西什么时候该露出来 ----------
-   data-phase 由 assets/room/gate.js 写(boot → landing → walking → room,起不来是 page),
+   data-phase 由 assets/room/gate.js 写(boot → landing → entering → room,起不来是 page),
    这里只跟着它摆,JS 里不去动任何样式。 */
 
-/* 顶栏那两枚开关管的是屋里的灯与昼夜,人还在门外时用不上。
+/* 顶栏那两枚开关管的是屋里的灯与昼夜,人还没退到定位那一格时用不上。
    收掉用 opacity + pointer-events 而不是 display:淡出时它还在原位,不引起布局跳动。 */
 .topbar {
   transition: opacity 0.4s var(--ease);
@@ -37,47 +37,6 @@
 
 html:not([data-phase="room"]):not([data-phase="page"]) .topbar {
   opacity: 0;
-  pointer-events: none;
-}
-
-/* 首屏阶段:屋里那 11 件还在后台补,整屏只留底部这一条线,补满自己收掉。 */
-.landing-line {
-  position: fixed;
-  inset: auto 0 0 0;
-  z-index: 18;
-  height: 2px;
-  display: none;
-  pointer-events: none;
-}
-
-html[data-phase="landing"] .landing-line {
-  display: block;
-}
-
-.landing-fill {
-  display: block;
-  width: 100%;
-  height: 100%;
-  transform: scaleX(var(--p, 0));
-  transform-origin: left center;
-  background: var(--accent);
-  opacity: 0.45;
-  transition: transform 0.35s var(--ease), opacity 0.4s var(--ease);
-}
-
-/* 齐了就淡掉:再留着就是「好像还在加载」的错觉,而那时候门早就可以点了 */
-html[data-phase="landing"] .landing-line[data-p="1"] .landing-fill {
-  opacity: 0;
-}
-
-/* 进门那块幕:不透明度由补间一帧一帧写(见 landing.js 的 curtainAt)。
-   压在画布之上、氛围层之下,所以暗角和颗粒在幕全黑时还连着。颜色跟场景背景是同一个。 */
-.curtain {
-  position: fixed;
-  inset: 0;
-  z-index: 12;
-  background: var(--bg);
-  opacity: var(--w, 0);
   pointer-events: none;
 }
 
@@ -140,9 +99,8 @@ html[data-phase="landing"] .landing-line[data-p="1"] .landing-fill {
   }
 }
 
-/* 「推门而入」只管门外那一段时间:进了屋(或者 3D 压根起不来)它就点不出别处 */
-html[data-phase="room"] .entry-enter,
-html[data-phase="page"] .entry-enter {
+/* 「看全景」只管首屏那一段时间:离开首屏(退到定位、正在退,或者 3D 压根起不来)它就点不出别处 */
+html:not([data-phase="landing"]) .entry-enter {
   display: none;
 }
 

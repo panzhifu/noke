@@ -27,10 +27,9 @@
     }
   </script>
 
-  <!-- 首屏那一格只要 three + 门那一只 glb(428 KB),两条都在 wasm 还在解的时候就开始拉。
-       preload 得带 crossorigin:GLTFLoader 那侧是 CORS 请求,属性不匹配就是两次下载。 -->
+  <!-- three 在 wasm 还在解的时候就开始拉;屋里的模型由 assets/room/main.js 并发补齐,
+       进度走加载盖层那条轨。 -->
   <link rel="modulepreload" href="./assets/vendor/three.module.min.js" />
-  <link rel="preload" href="./assets/models/door.glb" as="fetch" crossorigin />
 
   <link data-trunk rel="rust" data-wasm-opt="z" data-keep-debug="false" />
   <link data-trunk rel="css" href="styles/main.css" />
@@ -58,7 +57,7 @@
       // 加载界面是盖在页面上的固定层,所以「有没有 JS」得先告诉 CSS:没有 js 类它就不出现
       root.classList.add('js');
       // 兜底:3D 那个 module 脚本压根没跑起来(404、importmap 被忽略、老浏览器)时,
-      // 不能让一块等不到阶段的幕布占着整个屏幕。15 s 是按很慢的网速也够下完那 428 KB 留的。
+      // 不能让一块等不到阶段的盖层占着整个屏幕。15 s 是给很慢的网速下完 wasm 留的。
       setTimeout(function () {
         if (!root.getAttribute('data-phase')) root.setAttribute('data-phase', 'page');
       }, 15000);
@@ -67,22 +66,13 @@
 </head>
 <body>
   <!--
-    加载界面:一扇正在慢慢开的门。开的角度就是进度,门缝里透出来的是屋里的暖光。
-    撤掉它的是 <html data-phase>(assets/room/gate.js 写):首屏画成、或者 3D 起不来,都算有阶段了。
+    加载盖层:屋里的模型(全套约 12 MB)下载与预热期间的一块底色,就绪即被
+    <html data-phase> 撤掉(assets/room/gate.js 写),进度按件数走那条轨。
+    盖层一撤,首屏就是家具的特写 —— 点屏幕任意一下,镜头退后看全景。
   -->
   <div class="gate" role="progressbar" aria-label="正在载入房间" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-    <span class="gate-door" aria-hidden="true">
-      <span class="gate-light"></span>
-      <span class="gate-leaf"><span class="gate-knob"></span></span>
-    </span>
     <span class="gate-rail" aria-hidden="true"><span class="gate-fill"></span></span>
   </div>
-
-  <!-- 首屏阶段:屋里那 11 件还在后台补,底部这条线是唯一的提示 -->
-  <div class="landing-line" aria-hidden="true"><span class="landing-fill"></span></div>
-
-  <!-- 进门的转场:不透明度跟着补间走(见 landing.js 的 createWalkIn) -->
-  <div class="curtain" aria-hidden="true"></div>
 
   <noscript>
     <div class="wrap">

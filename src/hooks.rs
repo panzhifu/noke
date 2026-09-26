@@ -158,8 +158,8 @@ pub fn announce_room_mounted() {
     }
 }
 
-/// 键盘那条入口上的「推门而入」:3D 层听见了就按点门那同一条路走进去。
-/// 首屏是关着的门,而场景本身 aria-hidden —— 键盘只有这里进得了这门。
+/// 键盘那条入口上的「看全景」:3D 层听见了就按点屏幕那同一条路退到定位。
+/// 首屏的场景本身 aria-hidden —— 键盘只有这里看得了全景。
 pub fn announce_enter() {
     let Some(document) = web_sys::window().and_then(|window| window.document()) else {
         return;

@@ -105,8 +105,8 @@ pub fn App() -> impl IntoView {
     }
 }
 
-/// wasm 起来之后不做任何收尾:加载界面撤不撤只看 `<html data-phase>`
-/// (门厅画成 → porch、3D 这层起不来 → page、还有一个 15s 的超时兜底,见 index.html)。
+/// wasm 起来之后不做任何收尾:加载盖层撤不撤只看 `<html data-phase>`
+/// (首屏画成 → landing、3D 这层起不来 → page、还有一个 15s 的超时兜底,见 index.html)。
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 fn main() {
     console_error_panic_hook::set_once();

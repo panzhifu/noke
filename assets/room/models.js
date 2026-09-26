@@ -1,10 +1,10 @@
 /**
  * 把清单里的 glb 搬进 rig,并挑出「能点的那些网格」(userData 上挂 spot / door / spin / owner)。
  *
- * 加载的节奏由 main.js 分两格管(首屏只要门,屋里的在后台并发补齐),这一层只提供三件事:
+ * 加载的节奏由 main.js 管(全套并发补齐,盖层撤掉之前等齐),这一层只提供三件事:
  *   load()     单件:下载 → 装配 → 挑可点网格
  *   loadAll()  一批:并发 LOAD_CONCURRENCY 路,每件完成时报一次进度
- *   prewarm()  把材质与贴图提前交给 GPU,免得「进门」那一帧才去编译着色器、上传贴图
+ *   prewarm()  把材质与贴图提前交给 GPU,免得盖层一撤、首帧卡在编译与上传上
  */
 
 import * as THREE from 'three';
@@ -81,18 +81,12 @@ export function createModelLoader(rig, anisotropy) {
   const textures = [];
   let meshes = 0;
 
-  /**
-   * 下载并装配一件。`onBytes` 透传给 GLTFLoader 的 onProgress(静态托管带 Content-Length,
-   * 所以 loaded/total 是真字节数)。失败只警告、返回 null:少一件家具不该拖垮整间屋子。
-   *
-   * `hidden` 必须在 `rig.add` **之前**定下来 —— rig 每帧都在画,晚一步这件家具就在
-   * 首屏那一格里显形了一帧(那一格里只该有门)。
-   */
-  async function load(item, { onBytes, hidden = false } = {}) {
+  /** 下载并装配一件。失败只警告、返回 null:少一件家具不该拖垮整间屋子。 */
+  async function load(item) {
     if (!item || !item.file) return null;
     let gltf;
     try {
-      gltf = await loader.loadAsync(resolveUrl(item.file), onBytes);
+      gltf = await loader.loadAsync(resolveUrl(item.file));
     } catch (error) {
       console.warn(`[room3d] 加载失败: ${item.file}`, error);
       return null;
@@ -111,7 +105,7 @@ export function createModelLoader(rig, anisotropy) {
     // 墙的位置就是从那个盒子推出来的,算进去等于把墙自己推远(见 scene.js 的 fitRig)
     node.userData.wall = Boolean(item.wall);
 
-    // 会开关的部件(首屏那扇门 / 冰箱门):规格给的是 {node, axis, deg},按名字从 glb 里
+    // 会开关的部件(冰箱门、唱机防尘盖):规格给的是 {node, axis, deg},按名字从 glb 里
     // 挑出那个节点。轴与角度**跟着模型走** —— 冰箱门是竖直铰链(绕 Y)、上一台唱机的防尘盖
     // 是水平铰链(绕 X),写死一套就必有一件是错的。节点原点在导出时就摆在铰链上。
     let door = null;
@@ -151,7 +145,7 @@ export function createModelLoader(rig, anisotropy) {
         if (door) child.userData.door = door;
         // 存的就是那个上半身节点(它的原点在底盘轴心上);转多少度交给 config 的 SPIN_DEG
         if (spin) child.userData.spin = spin;
-        // 首屏只许点门:main.js 的 pickList 按「这块网格是谁家的」筛
+        // 拾取名单要能按「这块网格是谁家的」筛(见 main.js 的 pickList)
         child.userData.owner = node.name;
         // 面数太高的走包围盒代理:不然每帧一次射线就要遍历几十万三角形
         if (trianglesOf(child.geometry) >= HEAVY_PICK_TRIS) useBoxPick(child);
@@ -160,7 +154,6 @@ export function createModelLoader(rig, anisotropy) {
     });
 
     textures.push(...texturesOf(node));
-    node.visible = !hidden;
     rig.add(node);
     loaded.push(node.name);
     return node;
@@ -168,9 +161,10 @@ export function createModelLoader(rig, anisotropy) {
 
   /**
    * 一批并发下载,返回装好的那些节点(失败的不算)。
-   * 进度有两条:单件内部的字节数走 onBytes,件与件之间走 onItem —— 两条一起才拼得出总进度。
+   * `onItem(done, total)` 每件完成(成功或失败都算)时报一次 —— 进度按件数算,
+   * 不按字节算:十几只 glb 大小差着两个数量级,按字节会被床和机箱那两只带跑。
    */
-  async function loadAll(items, { concurrency = LOAD_CONCURRENCY, hidden = false, onItem } = {}) {
+  async function loadAll(items, { concurrency = LOAD_CONCURRENCY, onItem } = {}) {
     const queue = items.slice();
     const total = queue.length;
     const nodes = [];
@@ -178,7 +172,7 @@ export function createModelLoader(rig, anisotropy) {
     const worker = async () => {
       while (queue.length) {
         const item = queue.shift();
-        const node = await load(item, { hidden });
+        const node = await load(item);
         if (node) nodes.push(node);
         done += 1;
         onItem?.(done, total);
@@ -192,9 +186,10 @@ export function createModelLoader(rig, anisotropy) {
 
   /**
    * 预热:着色器交给 compile,贴图交给 initTexture。
-   * `compile` 走的是 traverse(不是 traverseVisible),所以家具还藏着也能先把材质编好;
+   * `compile` 走的是 traverse(不是 traverseVisible),藏着的家具也编得进来;
    * 贴图不是 —— 它要真被画到才会上传,所以这里点名逐个传。
-   * 挑在首屏那段时间里做,换景那一帧才不会在一次编译 + 一堆上传上被顶住。
+   * 挑在盖层还占着屏的时候做(main.js 的 assembleRoom),显出来的第一帧
+   * 才不会在一次编译 + 一堆上传上被顶住。
    */
   function prewarm(renderer, scene, camera) {
     for (const texture of textures) {

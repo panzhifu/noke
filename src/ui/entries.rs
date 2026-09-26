@@ -43,13 +43,13 @@ pub fn EntryBar(set_spot: WriteSignal<Option<Spot>>) -> impl IntoView {
         })
         .collect::<Vec<_>>();
 
-    // 首屏那扇门对键盘是隐形的(场景 aria-hidden),所以入口条上得自己有一枚。
-    // 进了屋它就没用了,由 CSS 按 data-phase 收掉。
+    // 首屏的 3D 场景对键盘是隐形的(整层 aria-hidden),而首屏要靠「点屏幕」退后看全景,
+    // 所以入口条上得自己有一枚。退到定位之后它就没用了,由 CSS 按 data-phase 收掉。
     view! {
         <nav class="entry-bar sr-only" aria-label="站点入口">
             <span class="entry-row">
                 <button type="button" class="entry entry-enter" on:click=|_| hooks::announce_enter()>
-                    "推门而入"
+                    "看全景"
                 </button>
                 { main }
                 { posters }

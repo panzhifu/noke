@@ -1,19 +1,19 @@
 /**
- * 页面最外层的 DOM:加载界面、首屏那条进度线、进门时那块幕。
+ * 页面最外层的 DOM:加载盖层。
  *
- * 这三样都写在 index.html 里(不在 Leptos 的视图里),因为它们要管的是「App 还没挂上」
+ * 它写在 index.html 里(不在 Leptos 的视图里),因为它要管的是「App 还没挂上」
  * 和「three.js 还没就绪」那两段时间。这一层只做一件事:把 JS 算出来的数字翻译成
- * CSS 自定义属性 + `<html data-phase>`,显示规则全在 styles/main.css / room3d.css 里。
+ * CSS 自定义属性 + `<html data-phase>`,显示规则全在 styles/main.css 里。
  *
  * 阶段(data-phase):
- *   空      还在下载门 —— 加载界面占屏
- *   landing   首屏:画面正中一扇关着的门,屋里的家具还在后台补
- *   walking 推门而入的补间中
- *   room    已经站在屋里
- *   page    3D 这层起不来(WebGL / 解码 / 超时),退回纯 DOM 页面
+ *   空        屋里的模型还在下载 —— 盖层占屏,进度走那条轨
+ *   landing   首屏:家具的特写(见 config.js 的 LANDING_RADIUS)
+ *   entering  点过屏幕了:镜头沿同一条视线缓退到定位那一格
+ *   room      已经退到定位
+ *   page      3D 这层起不来(WebGL 拿不到 / 一件都没加载上 / 超时),退回纯 DOM 页面
  */
 
-const PHASES = ['landing', 'walking', 'room', 'page'];
+const PHASES = ['landing', 'entering', 'room', 'page'];
 
 /** 写自定义属性:变化不足半个百分点就跳过 —— 下载进度是按 chunk 来的,能刷上百次。 */
 function setFraction(el, name, value, now) {
@@ -25,43 +25,28 @@ function setFraction(el, name, value, now) {
 }
 
 export function createGate(root = document.documentElement) {
-  // 认类名不认 id:这三样在 index.html 里就是靠这几个类和样式绑在一起的,少一份要对齐的名单
+  // 认类名不认 id:这个元素在 index.html 里就是靠类名与样式绑在一起的,少一份要对齐的名单
   const doc = root.ownerDocument;
   const gate = doc.querySelector('.gate');
-  const line = doc.querySelector('.landing-line');
-  const curtain = doc.querySelector('.curtain');
 
   let phase = '';
 
   return {
-    /** 进阶段。只认已知值,而且一旦到了 room 就不再倒退(超时兜底不能把屋门关上)。 */
+    /** 进阶段。只认已知值,而且到了 room / page 就不再倒退。 */
     setPhase(next) {
       if (!PHASES.includes(next)) return;
-      if (phase === 'room' && next !== 'room') return;
+      // room 与 page 都是终点:进了屋不能再退回首屏,超时兜过底也不该被后来的阶段改回去
+      if (phase === 'room' || (phase === 'page' && next !== 'page')) return;
       phase = next;
       root.dataset.phase = next;
     },
 
-    /** 门那一只 glb 的字节进度 —— 加载界面里那扇门就是这么一点点开开的。 */
-    bootProgress(fraction) {
+    /** 屋里那十几件的进度(按件数),喂给盖层那条轨。 */
+    progress(fraction) {
       if (!gate) return;
       setFraction(gate, 'p', fraction, (value) => {
         gate.setAttribute('aria-valuenow', String(Math.round(value * 100)));
       });
-    },
-
-    /** 屋里那 11 件的进度(按件数)。首屏那一格里只体现在底部那条线上。 */
-    roomProgress(fraction) {
-      if (line) setFraction(line, 'p', fraction);
-    },
-
-    /** 进门那块幕的不透明度:0 透明 → 1 全黑(颜色跟场景背景一致)。 */
-    wipe(opacity) {
-      if (!curtain) return;
-      const next = Math.min(Math.max(opacity, 0), 1);
-      if (curtain.dataset.w === String(next)) return;
-      curtain.dataset.w = String(next);
-      curtain.style.setProperty('--w', String(next));
     },
   };
 }
