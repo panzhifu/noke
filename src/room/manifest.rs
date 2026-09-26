@@ -45,13 +45,6 @@ pub struct Model {
     /// 整椅一起转的话轮子会在地上画圈。两者都是导出时按蒙皮权重切开的，见
     /// `target/tmp/gaming_chair/split_spin.py`（`seatBase` 那一支归上半身，其余归底座）。
     pub spin: Option<&'static str>,
-    /// 挂在墙上的家具（这屋里就是当封面那张黑胶）。`true` 表示它**不参与取景**：
-    /// 墙的位置是按场景包围盒算出来的（`fitRig` / `createWalls`），挂上去的东西要是一起算进去，
-    /// 盒子被撑大、墙就被自己推远，而且这个反馈没有不动点（墙退 0.9，东西就得再往后贴 0.9）。
-    /// 表现是「墙上多一张盘，整间屋子拉远一圈，盘还悬在墙前面」。
-    /// 贴墙是 `main.js` 在 `createWalls` 之后做的，所以下面那个 `position` 的 z 只是给
-    /// devtools 里看着方便，真正贴着哪一面由墙说了算。
-    pub wall: bool,
 }
 
 /// 目前有地毯、书桌、桌上的显示器 + 键盘 + 鼠标 + 一盏剪式臂台灯、唱机(唱机上躺一张黑胶)、
@@ -76,7 +69,6 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "bed",
@@ -94,15 +86,15 @@ pub const MODELS: &[Model] = &[
         spot: Some("about"),
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "fridge",
         file: "assets/models/fridge.glb",
         // 0.57 深 × 0.68 宽 × 1.34 高(关着门量),脚底贴 y=0 —— 见 target/tmp/export_fridge_door.py。
-        // 门在模型自己的 +x 面上,转 -90° 让门朝镜头这一侧(开的时候是往观众这边甩)。
-        position: (1.62, 0.0, 0.0),
-        rotation: (0.0, -90.0, 0.0),
+        // 门在模型自己的 +x 面上:转 -72° 让门朝镜头偏右 —— 墙拆了之后不再有「靠墙排一排」
+        // 这条线,稍微侧一点站,机身与门缝的线条才不会读成贴图。开门往观众右侧甩,落进空地。
+        position: (1.66, 0.0, 0.12),
+        rotation: (0.0, -72.0, 0.0),
         scale: 1.0,
         // 冰箱不开面板:点它是开关门(见下面的 door 字段)。
         spot: None,
@@ -112,7 +104,6 @@ pub const MODELS: &[Model] = &[
             deg: 89.888,
         }),
         spin: None,
-        wall: false,
     },
     Model {
         name: "turntable",
@@ -152,12 +143,11 @@ pub const MODELS: &[Model] = &[
             deg: 32.077,
         }),
         spin: None,
-        wall: false,
     },
     Model {
         name: "vinyl",
         file: "assets/models/vinyl.glb",
-        // 一张 12 寸黑胶(AC/DC《Highway to Hell》,Atlantic 厂牌),挂在背墙上当墙饰。
+        // 一张 12 寸黑胶(AC/DC《Highway to Hell》,Atlantic 厂牌),立在床头、靠着床背板。
         //
         // 源文件里这张盘是**斜 43°** 摆的 —— 三个轴都不薄,所以「最薄一面当顶」那条启发式
         // 对它没用(第一版直接把一根面内轴当法线,盘子是立起来的)。所以先走
@@ -165,23 +155,23 @@ pub const MODELS: &[Model] = &[
         // 再进压缩管线 `compress_glb.py leveled.glb 输出 1000 1024 "" 95` ——
         // 768 面一点不降,三张 1024² 转 WebP 95。799 KB → 186 KB。
         //
-        // 之前它躺在唱盘上,得缩到 0.5503 才配得上那台只吃 7 寸盘的小机器;上墙就是墙上的一张
-        // 封面,所以放回 1.0 = 完整的 0.30 直径。
+        // 之前它躺在唱盘上,得缩到 0.5503 才配得上那台只吃 7 寸盘的小机器;后来上过墙,
+        // 墙拆了之后平放到床尾的被面上 —— 放回 1.0 = 完整的 0.30 直径,像刚听完随手搁下的一张。
         //
-        // x/y 是「书桌正上方那段空墙」:显示器顶到 1.216、台灯在 x 0.62,盘占 y 1.35~1.65 /
-        // x 0.20~0.50,两样都不碰。z 这个数只是给 devtools 看着方便 —— 背墙的位置是按包围盒
-        // 算的,贴墙由 main.js 在 createWalls 之后负责(见 `wall` 字段的注释)。
-        position: (0.35, 1.5, -3.01),
-        // 绕 X 转 90° 把躺着的盘立起来:盘面(原本朝 +Y)转到朝 +Z = 朝镜头,
-        // 标签上沿(烘平之后在 -Z)转到朝 +Y = 朝上,所以字是正的。
-        rotation: (90.0, 0.0, 0.0),
+        // 落点是**解 bed.glb 实测出来的**:床是多块 primitive 的组合,背板在 -z 端(内缘
+        // z ≈ -1.03)、两只枕头占床中段(局部 x -0.49..0.50、顶到 y 0.73)、被子铺在
+        // z -0.80..1.09(鼓包 0.588~0.640)。在床尾半段扫了 0.34 直径的圆盘落点,最平的一块
+        // 在局部 (x -0.35, z 0.55),被面 0.584~0.620 —— 盘底放 0.622,压着褶皱高的一侧,
+        // 不会穿进被面。床位于 (-2.05, 0, 0.2),换算成世界坐标就是下面这个数。
+        position: (-2.4, 0.622, 0.75),
+        // 平放:盘面(烘平之后)朝 +Y,标签朝上。绕 Y 转 160° = 标签上沿转向镜头(原本朝 -Z,
+        // 正对镜头读起来才是正的)并偏 20° —— 和床沿别摆得平行,像随手搁下的角度。
+        rotation: (0.0, 160.0, 0.0),
         scale: 1.0,
         // 纯装饰,也不转了 —— 转的换成唱机自己的唱盘(见上面 platter)。
         spot: None,
         door: None,
         spin: None,
-        // 挂在墙上:不参与取景。不然这张 1.65 m 高的盘会把包围盒顶高、把墙和构图一起推远。
-        wall: true,
     },
     Model {
         name: "desk",
@@ -197,7 +187,6 @@ pub const MODELS: &[Model] = &[
         spot: Some("work"),
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "computer",
@@ -219,7 +208,6 @@ pub const MODELS: &[Model] = &[
         spot: Some("work"),
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "keyboard",
@@ -240,7 +228,6 @@ pub const MODELS: &[Model] = &[
         spot: Some("work"),
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "computer_mouse",
@@ -263,7 +250,6 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "desk_lamp",
@@ -279,14 +265,13 @@ pub const MODELS: &[Model] = &[
         //
         // 灯头在模型自己的 +X 那侧、底座偏 -X 约 4cm(包围盒是按中心归的,所以底座不在原点上)。
         position: (0.62, 0.716, -1.3),
-        // 转 180° 让灯头朝书桌中心(-X)探过去,光才打在桌面上而不是打在墙上。
+        // 转 180° 让灯头朝书桌中心(-X)探过去,光才打在键盘那一小片桌面上。
         rotation: (0.0, 180.0, 0.0),
         scale: 1.0,
         // 纯装饰。「房间灯」那盏 SpotLight 与灯罩自发光都跟着这个模型走,见 assets/room/main.js。
         spot: None,
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "pc_tower",
@@ -321,7 +306,6 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
-        wall: false,
     },
     Model {
         name: "gaming_chair",
@@ -340,7 +324,6 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: Some("chair_upper"),
-        wall: false,
     },
     Model {
         name: "guitar",
@@ -374,7 +357,6 @@ pub const MODELS: &[Model] = &[
         spot: None,
         door: None,
         spin: None,
-        wall: false,
     },
 ];
 
@@ -406,7 +388,7 @@ pub fn manifest_json() -> String {
             concat!(
                 r#"{{"name":"{}","file":"{}","#,
                 r#""position":[{},{},{}],"rotation":[{},{},{}],"#,
-                r#""scale":{},"spot":{},"door":{},"spin":{},"wall":{}}}"#
+                r#""scale":{},"spot":{},"door":{},"spin":{}}}"#
             ),
             model.name,
             model.file,
@@ -420,7 +402,6 @@ pub fn manifest_json() -> String {
             spot,
             door,
             spin,
-            if model.wall { "true" } else { "false" }
         ));
     }
     out.push(']');

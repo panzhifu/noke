@@ -17,8 +17,6 @@ export const VARIANTS = {
   'off-day': {
     background: 0xf7f5f0,
     floor: 0xc9c4b8,
-    wallBack: 0xe7e1d4,
-    wallSide: 0xddd6c6,
     hemiSky: 0xe4ebf5,
     hemiGround: 0xd6ccb9,
     hemiIntensity: 0.9,
@@ -37,8 +35,6 @@ export const VARIANTS = {
   'on-day': {
     background: 0xf7f5f0,
     floor: 0xc9c4b8,
-    wallBack: 0xe7e1d4,
-    wallSide: 0xddd6c6,
     hemiSky: 0xe4ebf5,
     hemiGround: 0xd6ccb9,
     hemiIntensity: 0.85,
@@ -57,8 +53,6 @@ export const VARIANTS = {
   'off-night': {
     background: 0x0b0c0f,
     floor: 0x15161b,
-    wallBack: 0x13151a,
-    wallSide: 0x0e1015,
     hemiSky: 0x55627a,
     hemiGround: 0x181a20,
     hemiIntensity: 0.5,
@@ -77,8 +71,6 @@ export const VARIANTS = {
   'on-night': {
     background: 0x08090c,
     floor: 0x101116,
-    wallBack: 0x0d0f13,
-    wallSide: 0x090b0f,
     hemiSky: 0x454d5e,
     hemiGround: 0x13151a,
     hemiIntensity: 0.58,

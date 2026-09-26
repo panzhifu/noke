@@ -32,12 +32,6 @@ export const CAMERA_AZIMUTH = (30 * Math.PI) / 180;
 // 把前景那一大片空地挤出去(pinchen 的注视点也高于家具,画面里墙占一半)。
 export const TARGET_LIFT = 0.4;
 
-// 墙角(两块景片)。高度取到「俯角 16° 时上边缘出画」为止 —— 留一点余量给拉到最远,
-// 这样画面顶部永远是墙而不是虚空;长度按场景跨度放大。
-export const WALL_HEIGHT = 5.6;
-export const WALL_SPAN = 2.6;
-export const WALL_PAD = 0.9;
-
 // 台灯 glb(assets/models/desk_lamp.glb)里灯泡那颗球的**材质名** —— 认它不是为了好看,
 // 是「房间灯」那盏 SpotLight 得挂在灯泡上、开灯时的自发光也得落在它身上。
 // 这个包 30 个部件 join 成 7 个材质分组,只有灯泡用 Ceramic(其余全是黑金属)。

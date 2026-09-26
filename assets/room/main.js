@@ -26,7 +26,7 @@
  *   config.js    数值常量与 deg()
  *   palette.js   四个光照状态的颜色/强度表,以及 data-theme + data-lights 的读法
  *   manifest.js  读 #room3d 上的模型清单、把相对路径解析成 URL
- *   scene.js     灯光组、景片(地板 + 两面墙)、按包围盒挪灯
+ *   scene.js     灯光组、地板、按包围盒挪灯
  *   framing.js   按包围盒算取景距离与雾的近远端、按球坐标摆位姿
  *   landing.js   首屏那一格特写、屋里定位那一格,以及两格之间的补间
  *   models.js    加载 glb(单件 / 并发一批 / 预热),挑出可点的网格
@@ -62,7 +62,7 @@ import {
 } from './config.js';
 import { VARIANTS, readVariant, variant, variantKey } from './palette.js';
 import { readManifest } from './manifest.js';
-import { boundsOf, buildStage, createScene, findLampBulb, fitRig } from './scene.js';
+import { boundsOf, createFloor, createScene, findLampBulb, fitRig } from './scene.js';
 import { deg } from './config.js';
 import { CAMERA_PITCH, fitCamera, fitDistance } from './framing.js';
 import { createModelLoader } from './models.js';
@@ -77,8 +77,6 @@ function spec(key) {
   return {
     background: v.background,
     floor: v.floor,
-    wallBack: v.wallBack,
-    wallSide: v.wallSide,
     hemiSky: v.hemiSky,
     hemiGround: v.hemiGround,
     hemiIntensity: v.hemiIntensity,
@@ -106,8 +104,6 @@ const INTENSITY_KEYS = [
 const COLOR_KEYS = [
   'background',
   'floor',
-  'wallBack',
-  'wallSide',
   'hemiSky',
   'hemiGround',
   'key',
@@ -191,8 +187,8 @@ function start(host) {
   let models = null;
   // 屋里那十几件:加载盖层撤掉之前就全部就位,首屏那一格里它们都在
   let furniture = [];
-  // 一套景片(地板 + 两面墙):按家具包围盒量出来,建一次用到底
-  let stage = null;
+  // 一块地板:按家具包围盒量出来铺,墙没有 —— 屋子是一圈化进雾里的开放地台
+  let floor = null;
   let platter = null;
   // 唱盘那一圈角速度(弧度/秒)
   const platterOmega = (PLATTER_RPM * Math.PI * 2) / 60;
@@ -243,10 +239,8 @@ function start(host) {
     lights.lamp.color = new THREE.Color(current.lamp);
     lights.lamp.intensity = current.lampIntensity;
     if (lampBulb) lampBulb.emissive = new THREE.Color(current.lampEmissive);
-    if (!stage) return;
-    stage.floor.material.color = new THREE.Color(current.floor);
-    stage.walls.back.material.color = new THREE.Color(current.wallBack);
-    stage.walls.side.material.color = new THREE.Color(current.wallSide);
+    if (!floor) return;
+    floor.material.color = new THREE.Color(current.floor);
   };
 
   /**
@@ -702,7 +696,6 @@ function start(host) {
     meshes: meshCount,
     pickable: pickables.length,
     lights: 5,
-    walls: 2,
     fog: true,
     controls: 'orbit',
     fov: CAMERA_FOV,
@@ -750,16 +743,13 @@ function start(host) {
       return false;
     }
 
-    // 嵌在墙上的那几件(墙上当封面的黑胶)不参与取景:墙的位置就是从这个盒子推出来的,
-    // 算进去等于把墙自己推远,而且这个反馈没有不动点(见 manifest.rs 的 wall 字段)
-    const measured = furniture.filter((node) => !node.userData.wall);
-    const fitted = boundsOf(measured);
+    const fitted = boundsOf(furniture);
     center = fitted.center;
     size = fitted.size;
 
-    // 屋里的景片:地板 + 两面墙,尺寸全从家具包围盒倒推
-    stage = buildStage(current, size, center, Math.max(size.x, size.z));
-    rig.add(stage.group);
+    // 一块地板,尺寸从家具包围盒倒推;铺得比场景大几圈,远端交给雾化进背景
+    floor = createFloor(current, Math.max(size.x, size.z), center);
+    rig.add(floor);
     // 灯与阴影相机按这份包围盒量:三盏光都是平行的,只有方向要紧(见 fitRig)
     fitRig(lights, lights.focus, size, center);
 
@@ -784,13 +774,6 @@ function start(host) {
     // 唱盘:唱机 glb 里单独分出来的 platter 节点,房间灯开着时它转(见 stepPlatter)
     platter = rig.getObjectByName('platter') || null;
     if (!platter) console.warn('[room3d] 唱机里没有 platter 节点,唱盘不会转');
-
-    // 挂在背墙上的家具(墙上当封面的那张黑胶)统一贴到墙面上。
-    // 离墙 3mm:它们自己的网格和墙是两套网格,共面的那条边会打架(z-fighting)。
-    // 清单里写的那个 z 只是给 devtools 看着方便,真正贴上去靠这一行。
-    for (const node of rig.children) {
-      if (node.userData.wall) node.position.z = stage.walls.backZ + 0.003;
-    }
 
     framing = fitCamera(camera, host, center, size, framingAzimuth());
     room = roomPose(framing);

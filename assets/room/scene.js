@@ -1,5 +1,5 @@
 /**
- * 场景本体:灯光组、地板、墙角,外加「房间灯那盏聚光该挂在哪儿」—— 台灯进清单之后,
+ * 场景本体:灯光组、地板,外加「房间灯那盏聚光该挂在哪儿」—— 台灯进清单之后,
  * 灯头的位置是从模型里认出来的,不是这里写死的。
  *
  * 灯光组的形状照 pinchen.me 来:半球(天/地) + 主光(投影) + 补光 + 反弹光 + 一盏暖聚光。
@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { LAMP_BULB_MATERIAL, WALL_HEIGHT, WALL_PAD, WALL_SPAN } from './config.js';
+import { LAMP_BULB_MATERIAL } from './config.js';
 
 export function createScene(variant) {
   const scene = new THREE.Scene();
@@ -71,38 +71,6 @@ export function findLampBulb(rig) {
     if (!bulb && node.isMesh && node.material?.name === LAMP_BULB_MATERIAL) bulb = node;
   });
   return bulb;
-}
-
-/**
- * 墙角:两片大板封出 -z 与 -x 那个角。镜头从 +z 侧看过来,这两面正好是背景。
- * 高度给到远处,让上边缘尽量出画;侧边则故意留在画里 —— pinchen 的舞台就是这样,
- * 墙不是封闭房间,是两块景片,边缘露着背景才像「摆出来的一角」。
- */
-export function createWalls(variant, size, center) {
-  const group = new THREE.Group();
-  group.name = 'walls';
-  const height = WALL_HEIGHT;
-  const width = Math.max(Math.max(size.x, size.z) * WALL_SPAN, 8);
-  const backZ = center.z - size.z / 2 - WALL_PAD;
-  const sideX = center.x - size.x / 2 - WALL_PAD;
-
-  const back = new THREE.Mesh(
-    new THREE.PlaneGeometry(width, height),
-    new THREE.MeshStandardMaterial({ color: variant.wallBack, roughness: 0.95, metalness: 0 }),
-  );
-  back.position.set(center.x, height / 2, backZ);
-  back.receiveShadow = true;
-
-  const side = new THREE.Mesh(
-    new THREE.PlaneGeometry(width, height),
-    new THREE.MeshStandardMaterial({ color: variant.wallSide, roughness: 0.95, metalness: 0 }),
-  );
-  side.rotation.y = Math.PI / 2;
-  side.position.set(sideX, height / 2, center.z);
-  side.receiveShadow = true;
-
-  group.add(back, side);
-  return { group, back, side, height, backZ };
 }
 
 /**
@@ -168,15 +136,3 @@ export function boundsOf(nodes) {
   };
 }
 
-/**
- * 一套「景片」:地板 + 两面墙(墙角照 pinchen 的做法是两块景片,不是封闭房间)。
- * 尺寸由调用方给 —— 从家具包围盒推出来(main.js 的 assembleRoom),建一次用到底。
- */
-export function buildStage(variant, size, center, floorSpan) {
-  const group = new THREE.Group();
-  group.name = 'stage';
-  const floor = createFloor(variant, floorSpan, center);
-  const walls = createWalls(variant, size, center);
-  group.add(floor, walls.group);
-  return { group, floor, walls };
-}
