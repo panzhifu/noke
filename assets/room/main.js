@@ -18,7 +18,7 @@
  * 整层是一个阶段状态机(下面的 `phase`),首屏不是「屋子正在加载」而是「一扇门」:
  *   boot     只有门在下载(428 KB),屏幕上是一扇正在开的门图标 + 进度
  *   landing  首屏:画面正中一扇关着的门,背后只有背景色;屋里的 11.6 MB 在后台并发补,先藏着
- *   walking  点了门:推到门框前 → 幕 → 换景 → 退到定位镜头(见 landing.js)
+ *   walking  点了屏幕(任意一处,不必点中门):推开门 → 幕 → 换景 → 退到定位镜头
  *   room     已经站在屋里,也就是这一层原本的样子
  *   page     3D 这层起不来(WebGL 拿不到 / 装配炸了),退回纯 DOM 页面
  *
@@ -207,6 +207,8 @@ function start(host) {
   // 首屏那件东西(门)与屋里的景片:进屋就是这两者的可见性对调一次,换的那一帧由幕盖住
   let landingDoor = null;
   let landingBox = null;
+  // 门那套开合规格(节点 / 轴 / 角度),点屏幕进屋时用它把门推开
+  let entryDoor = null;
   let roomStage = null;
   let stages = [];
   let platter = null;
@@ -225,7 +227,7 @@ function start(host) {
   let landing = null;
   let room = null;
   let walk = null;
-  // 家具齐了 + 预热完了才算「能进」;在那之前点了门只是先把门打开
+  // 家具齐了 + 预热完了才算「能进」;在那之前点了屏幕只是先记下这一笔,齐了自己接上
   let roomReady = false;
   let pendingEnter = false;
   let placed = false;
@@ -313,7 +315,7 @@ function start(host) {
     if (!door || door.node !== spec.node) {
       door = { node: spec.node, axis: spec.axis, angle: 0, target: open, open: true };
     } else {
-      // keepOpen:首屏那扇门在「点一下开门、再点一下进去」这两拍里不许被关回去
+      // keepOpen:进屋这一路上门不许被关回去(点屏幕那一下既要开门也要走位)
       door.open = keepOpen ? true : !door.open;
       door.target = door.open ? open : 0;
     }
@@ -612,11 +614,9 @@ function start(host) {
       frame.invalidate();
       return;
     }
-    if (!reduced) {
+    if (!reduced && phase !== 'landing') {
       parallax.tx = (nx - 0.5) * PARALLAX_YAW;
-      // 上下那一点是把整组东西绕横轴掀一下:屋里有墙有地,看着是纵深;首屏只有一扇门的
-      // 时候,它就是「门歪在墙上」那个观感。所以门外这一段只做左右那半。
-      parallax.ty = phase === 'landing' ? 0 : -(ny - 0.5) * PARALLAX_PITCH;
+      parallax.ty = -(ny - 0.5) * PARALLAX_PITCH;
     }
     // 拾取交给下一帧(见 loop.js),这里只记下指针动了
     frame.requestPick();
@@ -641,17 +641,20 @@ function start(host) {
     dragging = null;
     // 走位途中不接受点击:镜头自己在动,拾取到的是每帧换掉的东西
     if (traveled > DRAG_THRESHOLD || phase === 'walking') return;
+    // 首屏画面:点**任意一处**都是「进去」。门仍然立在画面正中当主角,但它不再是
+    // 必须点中的靶子 —— 要求点中它,结果是随手点在别处没反应,而想动一下视角又必然点中它。
+    // 顺手把门推开,让这一段的读法还是「推门而入」。
+    if (phase === 'landing') {
+      toggleDoor(entryDoor, true);
+      enterRoom();
+      return;
+    }
     const mesh = pickAt(false);
     frame.invalidate();
     if (!mesh) return;
-    // 会动的家具优先:门是开关、转椅是转圈,都不开面板
+    // 会动的家具优先:冰箱门与唱机盖是开关、转椅是转圈,都不开面板
     if (mesh.userData.door) {
-      // 首屏那扇门要**两下**才算进去:关着时这一下只把它推开,已经开着再点才是走进去。
-      // 门在画面上占了大半屏,随手一下就会点在它身上 —— 不该因此被搬进屋子里。
-      const entry = phase === 'landing' && mesh.userData.owner === ENTRY.name;
-      const wasOpen = Boolean(door && door.node === mesh.userData.door.node && door.open);
-      toggleDoor(mesh.userData.door, entry);
-      if (entry && wasOpen) enterRoom();
+      toggleDoor(mesh.userData.door);
       return;
     }
     if (mesh.userData.spin) {
@@ -805,6 +808,8 @@ function start(host) {
     resize();
     renderer.compile(scene, camera);
     pickList = models.stats().pickables.filter((mesh) => mesh.userData.owner === ENTRY.name);
+    // 点屏幕任意处进屋时,顺手把这扇门推开 —— 走位的读法还是「推门而入」
+    entryDoor = pickList.find((mesh) => mesh.userData.door)?.userData.door || null;
 
     phase = 'landing';
     gate.setPhase('landing');

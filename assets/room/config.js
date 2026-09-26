@@ -96,18 +96,20 @@ export const ENTRY = {
 // 首屏又几乎占满整屏,所以这个数直接决定「一厘米落到几个像素」—— 留白给太大就等于把
 // 细节推到看不清:1.15 是「门完整入画、上下各留一点边」的那一档。
 export const LANDING_FILL = 1.15;
-// 站位:方位角偏右 8°(与屋里的 30° 同侧,门框的厚度看得出来)、俯角 2°。
-// 俯角基本给到 0 是有原因的:镜头一往下压,门的竖边就会往上收(透视收敛),整扇门看着
-// 像歪在墙上。2° 正好是 OrbitControls 极角上限(88°)那一档,再往上抬就会被钳住。
-export const LANDING_AZIMUTH = (8 * Math.PI) / 180;
+// 站位:正对门(方位角 0)、几乎平视。
+// 两个数都是「别让它看着歪」的结论:方位角一偏,门框两条竖边就一边长一边短;俯角一压,
+// 竖边就往上收(透视收敛)。俯角给 2° 而不是 0 —— 0 会被 OrbitControls 的极角上限 88°
+// 钳回来,给 2° 正好落在那条线上,位姿不会被偷偷改掉。
+export const LANDING_AZIMUTH = 0;
 export const LANDING_PITCH = (2 * Math.PI) / 180;
 // 首屏这一档雾几乎用不上(画面里只有门,而且门在雾的近端之前)。留着是因为走位前段
 // 要拿它当起点,换景那一拍再换成屋里按取景算出来的那一档
 export const LANDING_FOG = [1.15, 1.9];
-// 走到位时离门心多远(米)
+// 走到位时离门心多远(米)。方位角与俯角跟首屏那一档一致 —— 中途一改角度,门就又歪一下,
+// 而这一段本来只是「凑近」,不该同时换视角
 export const THRESHOLD_RADIUS = 0.95;
-export const THRESHOLD_AZIMUTH = (5 * Math.PI) / 180;
-export const THRESHOLD_PITCH = (4 * Math.PI) / 180;
+export const THRESHOLD_AZIMUTH = 0;
+export const THRESHOLD_PITCH = (2 * Math.PI) / 180;
 // 幕落在这一头(补间的 0~1):= 走到门框前、换景的那一瞬间
 export const ENTER_REVEAL = 0.5;
 // 换景之后镜头从「已经站在屋里」起步退到定位镜头:这一段占定位距离的几分之几
