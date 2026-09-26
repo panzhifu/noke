@@ -48,6 +48,16 @@ html[data-theme="light"] .hud-vignette {
   );
 }
 
+/* 首屏那一格是一整面平色的门,颗粒与扫描线叠在上面就是「发糊」的观感 —— 这两层收掉,
+   暗角留着(它给的是构图,不是噪点)。进了屋再按原样开:那里画面本身有细节,噪点是质感。 */
+html[data-phase="landing"] .hud-scan {
+  display: none;
+}
+
+html[data-phase="landing"] .hud-grain {
+  opacity: 0.22;
+}
+
 /* 颗粒轻轻抖:就是参考站那种 jitter 手感,只动 transform(合成层,不触发重排) */
 @media (prefers-reduced-motion: no-preference) {
   .hud-grain {

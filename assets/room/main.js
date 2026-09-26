@@ -307,13 +307,14 @@ function start(host) {
    * (绕 x、85.552°)—— 早先这里写死 `rotation.y` + 一个全局 `DOOR_OPEN_DEG`,
    * 第二扇「门」一接上就必有一件是错的。
    */
-  const toggleDoor = (spec) => {
+  const toggleDoor = (spec, keepOpen = false) => {
     if (!spec) return;
     const open = deg(spec.deg);
     if (!door || door.node !== spec.node) {
       door = { node: spec.node, axis: spec.axis, angle: 0, target: open, open: true };
     } else {
-      door.open = !door.open;
+      // keepOpen:首屏那扇门在「点一下开门、再点一下进去」这两拍里不许被关回去
+      door.open = keepOpen ? true : !door.open;
       door.target = door.open ? open : 0;
     }
     // 状态用显式的 open 标志,不看 target 的正负:防尘盖的「掀开」是**负**角度
@@ -643,9 +644,12 @@ function start(host) {
     if (!mesh) return;
     // 会动的家具优先:门是开关、转椅是转圈,都不开面板
     if (mesh.userData.door) {
-      toggleDoor(mesh.userData.door);
-      // 首屏那扇门顺带是入口:开它的同时推门进去
-      if (mesh.userData.owner === ENTRY.name) enterRoom();
+      // 首屏那扇门要**两下**才算进去:关着时这一下只把它推开,已经开着再点才是走进去。
+      // 门在画面上占了大半屏,随手一下就会点在它身上 —— 不该因此被搬进屋子里。
+      const entry = phase === 'landing' && mesh.userData.owner === ENTRY.name;
+      const wasOpen = Boolean(door && door.node === mesh.userData.door.node && door.open);
+      toggleDoor(mesh.userData.door, entry);
+      if (entry && wasOpen) enterRoom();
       return;
     }
     if (mesh.userData.spin) {
