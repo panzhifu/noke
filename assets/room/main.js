@@ -614,7 +614,9 @@ function start(host) {
     }
     if (!reduced) {
       parallax.tx = (nx - 0.5) * PARALLAX_YAW;
-      parallax.ty = -(ny - 0.5) * PARALLAX_PITCH;
+      // 上下那一点是把整组东西绕横轴掀一下:屋里有墙有地,看着是纵深;首屏只有一扇门的
+      // 时候,它就是「门歪在墙上」那个观感。所以门外这一段只做左右那半。
+      parallax.ty = phase === 'landing' ? 0 : -(ny - 0.5) * PARALLAX_PITCH;
     }
     // 拾取交给下一帧(见 loop.js),这里只记下指针动了
     frame.requestPick();
